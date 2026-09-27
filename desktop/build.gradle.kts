@@ -4,6 +4,14 @@ plugins {
     kotlin("multiplatform")
     id("org.jetbrains.compose")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("org.jetbrains.kotlin.plugin.noarg")
+}
+
+// Gson-Fix für Desktop-JVM: parameterlose Konstruktoren für alle @NoArg-Klassen
+// erzeugen (siehe NoArg.kt). Ohne das schlägt die Deserialisierung der
+// Xtream-API-Antworten mit "Unable to create instance of class ..." fehl.
+noArg {
+    annotation("com.smartys.iptv.NoArg")
 }
 
 kotlin {

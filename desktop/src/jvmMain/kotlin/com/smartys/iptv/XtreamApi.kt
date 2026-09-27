@@ -6,6 +6,7 @@ import retrofit2.http.Query
 
 // ---------- Xtream Panel API models ----------
 
+@NoArg
 data class UserInfo(
     @SerializedName("username") val username: String,
     @SerializedName("password") val password: String,
@@ -15,23 +16,27 @@ data class UserInfo(
     @SerializedName("active_cons") val activeCons: String?
 )
 
+@NoArg
 data class ServerInfo(
     @SerializedName("url") val url: String,
     @SerializedName("port") val port: String,
     @SerializedName("server_protocol") val serverProtocol: String?
 )
 
+@NoArg
 data class PanelAuth(
     @SerializedName("user_info") val userInfo: UserInfo,
     @SerializedName("server_info") val serverInfo: ServerInfo
 )
 
+@NoArg
 data class Category(
     @SerializedName("category_id") val id: String,
     @SerializedName("category_name") val name: String,
     @SerializedName("parent_id") val parentId: String? = null
 )
 
+@NoArg
 data class LiveStream(
     @SerializedName("num") val num: Int?,
     @SerializedName("name") val name: String,
@@ -53,6 +58,7 @@ data class LiveStream(
     fun archiveHours(): Int = (tvArchiveDuration ?: 0).coerceAtLeast(if (hasArchive()) 6 else 0)
 }
 
+@NoArg
 data class EpgEntry(
     @SerializedName("id") val id: String?,
     @SerializedName("epg_id") val epgId: String?,
@@ -62,12 +68,14 @@ data class EpgEntry(
     @SerializedName("end") val end: String?
 )
 
+@NoArg
 data class ShortEpg(
     @SerializedName("epg_listings") val epgListings: List<EpgEntry>?
 )
 
 // ---------- VOD (Movies + Series) models ----------
 
+@NoArg
 data class VodStream(
     @SerializedName("num") val num: Int?,
     @SerializedName("name") val name: String,
@@ -89,6 +97,7 @@ data class VodStream(
     fun hasTrailer(): Boolean = !trailer.isNullOrBlank()
 }
 
+@NoArg
 data class SeriesStream(
     @SerializedName("num") val num: Int?,
     @SerializedName("name") val name: String,
@@ -108,11 +117,13 @@ data class SeriesStream(
     var categoryName: String = ""
 }
 
+@NoArg
 data class VodInfo(
     @SerializedName("info") val info: Map<String, Any?>?,
     @SerializedName("movie_data") val movieData: Map<String, Any?>?
 )
 
+@NoArg
 data class SeriesEpisode(
     @SerializedName("id") val id: String,
     @SerializedName("episode_num") val episodeNum: String?,
@@ -122,12 +133,14 @@ data class SeriesEpisode(
     @SerializedName("rating") val rating: String?
 )
 
+@NoArg
 data class SeriesSeason(
     @SerializedName("season_number") val seasonNumber: Int?,
     @SerializedName("name") val name: String?,
     @SerializedName("episodes") val episodes: List<SeriesEpisode>?
 )
 
+@NoArg
 data class SeriesInfo(
     @SerializedName("seasons") val seasons: List<SeriesSeason>?,
     @SerializedName("info") val info: Map<String, Any?>?,
