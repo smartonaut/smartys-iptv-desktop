@@ -1,0 +1,561 @@
+package com.smartys.iptv
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.*
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+
+// ---------- Poster-Helper (Coil 3, mit Fehler-/Lade-Fallback) ----------
+
+@Composable
+fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRadius: Int = 10) {
+    val shape = RoundedCornerShape(cornerRadius.dp)
+    Box(modifier.clip(shape).background(Card)) {
+        if (url.isNullOrBlank()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(title, color = TextMid, fontSize = 12.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(8.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
+            }
+        } else {
+            AsyncImage(
+                model = url,
+                contentDescription = title,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+// ---------- Live-TV ----------
+
+@Composable
+fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit) {
+    var selectedCat by remember { mutableStateOf<String?>(null) }
+    var favMode by remember { mutableStateOf(false) }
+    var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode()) }
+    var channelMenuFor by remember { mutableStateOf<LiveStream?>(null) }
+    var pinFor by remember { mutableStateOf<LiveStream?>(null) }
+
+    val applied = remember(state.channels, selectedCat, favMode, vm.favorites, sortMode) {
+        var list = when {
+            favMode -> state.channels.filter { it.streamId in vm.favorites }
+            selectedCat == null -> state.channels
+            else -> state.channels.filter { it.categoryId == selectedCat }
+        }
+        ChannelPrefs.apply(list)
+    }
+
+    Row(Modifier.fillMaxSize().background(Bg)) {
+        // Kategorien-Sidebar
+        LazyColumn(Modifier.width(250.dp).fillMaxHeight().background(Sidebar)) {
+            item {
+                Text("Alle Kanäle",
+                    color = if (selectedCat == null && !favMode) Accent else TextMid,
+                    fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = null; favMode = false }.padding(16.dp))
+            }
+            item {
+                Text("Favoriten (${vm.favorites.size})",
+                    color = if (favMode) Accent else TextMid,
+                    fontWeight = if (favMode) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { favMode = true; selectedCat = null }.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            items(state.categories) { cat ->
+                Text(cat.name,
+                    color = if (selectedCat == cat.id && !favMode) Accent else TextMid,
+                    fontWeight = if (selectedCat == cat.id && !favMode) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = cat.id; favMode = false }.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+        }
+
+        // Kanal-Liste
+        Column(Modifier.weight(1f)) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    when {
+                        favMode -> "Favoriten"
+                        selectedCat == null -> "Alle Kanäle"
+                        else -> state.categories.firstOrNull { it.id == selectedCat }?.name ?: ""
+                    },
+                    color = TextHi, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                Text("${applied.size} Kanäle", color = TextMid, fontSize = 13.sp)
+                Spacer(Modifier.width(12.dp))
+                // Sortier-Button (Zyklus: Nummer → A–Z → Manuell)
+                val label = when (sortMode) {
+                    "name" -> "Sortieren: A–Z"
+                    "manual" -> "Sortieren: Manuell"
+                    else -> "Sortieren: Nummer"
+                }
+                Surface(
+                    shape = RoundedCornerShape(8.dp), color = Card,
+                    modifier = Modifier.clickable {
+                        sortMode = when (sortMode) {
+                            "num" -> "name"
+                            "name" -> "manual"
+                            else -> "num"
+                        }
+                        ChannelPrefs.setSortMode(sortMode)
+                    }
+                ) {
+                    Text(label, color = Accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                }
+            }
+
+            LazyColumn(Modifier.weight(1f).padding(horizontal = 16.dp)) {
+                items(applied, key = { it.streamId }) { ch ->
+                    ChannelRow(ch, vm, isFav = ch.streamId in vm.favorites,
+                        onToggleFav = { vm.toggleFavorite(ch.streamId) },
+                        onPlay = {
+                            if (ChannelPrefs.isLocked(ch.streamId)) pinFor = ch
+                            else onPlay(ch)
+                        }, onLongPress = { channelMenuFor = ch })
+                }
+            }
+        }
+    }
+
+    // Kanal-Langdruck-Menü
+    channelMenuFor?.let { ch ->
+        ChannelMenuDialog(ch,
+            onDismiss = { channelMenuFor = null },
+            onMoveUp = { ChannelPrefs.move(applied, ch.streamId, -1); channelMenuFor = null },
+            onMoveDown = { ChannelPrefs.move(applied, ch.streamId, 1); channelMenuFor = null },
+            onHide = { ChannelPrefs.hide(ch.streamId); channelMenuFor = null },
+            onLock = { pinFor = ch; channelMenuFor = null })
+    }
+
+    // FSK18-PIN-Abfrage
+    pinFor?.let { ch ->
+        PinDialog(
+            title = "FSK18 — ${ch.name}",
+            onDismiss = { pinFor = null },
+            onUnlock = { if (ParentalControl.verify(it)) { ChannelPrefs.setLocked(ch.streamId, false); onPlay(ch) } },
+            onSetPin = { ParentalControl.setPin(it); ChannelPrefs.setLocked(ch.streamId, true) })
+    }
+}
+
+@Composable
+private fun ChannelRow(ch: LiveStream, vm: DesktopViewModel, isFav: Boolean, onToggleFav: () -> Unit, onPlay: () -> Unit, onLongPress: () -> Unit) {
+    val epg = vm.epgCache[ch.streamId]
+    LaunchedEffect(ch.streamId) { vm.epgFor(ch) }
+
+    Row(
+        Modifier.fillMaxWidth().combinedClickable(onClick = onPlay, onLongClick = onLongPress)
+            .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.size(40.dp).clip(RoundedCornerShape(6.dp)).background(Card), contentAlignment = Alignment.Center) {
+            Text(ch.num?.toString() ?: "•", color = TextMid, fontSize = 13.sp)
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (ChannelPrefs.isLocked(ch.streamId)) {
+                    Text("🔒 ", color = Accent, fontSize = 13.sp)
+                }
+                Text(ch.name, color = TextHi, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            // Now/Next EPG
+            val (now, next) = vm.nowNext(ch)
+            now?.let { p ->
+                Text("${XmltvEpg.hhmm(p.start)}  ${p.title}", color = Accent, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            next?.let { p ->
+                Text("${XmltvEpg.hhmm(p.start)}  ${p.title}", color = TextMid, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        // Favoriten-Stern (separater Klick-Target)
+        Text(
+            if (isFav) "★" else "☆",
+            color = if (isFav) Accent else TextMid,
+            fontSize = 18.sp,
+            modifier = Modifier.clickable(onClick = onToggleFav).padding(horizontal = 10.dp)
+        )
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun ChannelMenuDialog(
+    ch: LiveStream,
+    onDismiss: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onHide: () -> Unit,
+    onLock: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Card,
+        title = { Text(ch.name, color = TextHi, fontSize = 18.sp) },
+        text = {
+            Column {
+                MenuItem("Nach oben verschieben", onMoveUp)
+                MenuItem("Nach unten verschieben", onMoveDown)
+                MenuItem("Ausblenden", onHide)
+                MenuItem(if (ChannelPrefs.isLocked(ch.streamId)) "FSK18-Sperre aufheben" else "FSK18 sperren (PIN)", onLock)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen", color = Accent) } }
+    )
+}
+
+@Composable
+private fun MenuItem(label: String, onClick: () -> Unit) {
+    Text(label, color = TextHi, fontSize = 15.sp,
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 10.dp))
+}
+
+@Composable
+fun PinDialog(
+    title: String,
+    onDismiss: () -> Unit,
+    onUnlock: (String) -> Unit,
+    onSetPin: (String) -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf(false) }
+    val hasPin = ParentalControl.isEnabled()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Card,
+        title = { Text(title, color = TextHi, fontSize = 18.sp) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    if (hasPin) "PIN eingeben:" else "Noch kein PIN gesetzt. Neuen PIN festlegen:",
+                    color = TextMid, fontSize = 14.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = pin,
+                    onValueChange = { pin = it.filter { c -> c.isDigit() }.take(4) },
+                    singleLine = true,
+                    textStyle = LocalTextStyle.current.copy(fontSize = 22.sp, textAlign = TextAlign.Center, color = TextHi)
+                )
+                if (error) {
+                    Spacer(Modifier.height(8.dp))
+                    Text("Falsche PIN", color = Danger, fontSize = 13.sp)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                if (pin.length != 4) return@TextButton
+                if (hasPin) {
+                    if (ParentalControl.verify(pin)) onUnlock(pin) else { error = true; pin = "" }
+                } else {
+                    onSetPin(pin)
+                }
+            }) { Text("OK", color = Accent) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen", color = TextMid) } }
+    )
+}
+
+// ---------- Filme (VOD) ----------
+
+@Composable
+fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onPlayMovie: (VodStream) -> Unit) {
+    LaunchedEffect(Unit) { if (vm.vodMovies.isEmpty()) vm.loadVod() }
+
+    var selectedCat by remember { mutableStateOf<String?>(null) }
+    val shownCats = remember(vm.vodCategories) { CategoryPrefs.applyTo("movies", vm.vodCategories) }
+    val applied = remember(vm.vodMovies, selectedCat) {
+        if (selectedCat == null) vm.vodMovies
+        else vm.vodMovies.filter { it.categoryId == selectedCat }
+    }
+
+    if (vm.vodLoading && vm.vodMovies.isEmpty()) {
+        CenteredBox { CircularProgressIndicator(color = Accent) }
+        return
+    }
+    vm.vodError?.let { err ->
+        CenteredBox { Text(err, color = Danger, fontSize = 14.sp) }
+        return
+    }
+
+    Row(Modifier.fillMaxSize().background(Bg)) {
+        LazyColumn(Modifier.width(250.dp).fillMaxHeight().background(Sidebar)) {
+            item {
+                Text("Alle Filme",
+                    color = if (selectedCat == null) Accent else TextMid,
+                    fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = null }.padding(16.dp))
+            }
+            items(shownCats) { cat ->
+                Text(cat.name,
+                    color = if (selectedCat == cat.id) Accent else TextMid,
+                    fontWeight = if (selectedCat == cat.id) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = cat.id }.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+        }
+        Box(Modifier.weight(1f).padding(16.dp)) {
+            if (applied.isEmpty()) {
+                CenteredBox { Text("Keine Filme in dieser Kategorie", color = TextMid) }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(150.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(applied, key = { it.streamId }) { m ->
+                        Column(Modifier.fillMaxWidth().clickable { onPlayMovie(m) }) {
+                            Poster(m.poster(), m.name, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                            Spacer(Modifier.height(8.dp))
+                            Text(m.name, color = TextHi, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            m.rating?.let {
+                                Text("★ $it", color = Accent, fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------- Serien ----------
+
+@Composable
+fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
+    LaunchedEffect(Unit) { if (vm.seriesShows.isEmpty()) vm.loadSeries() }
+
+    var selectedCat by remember { mutableStateOf<String?>(null) }
+    val shownCats = remember(vm.seriesCategories) { CategoryPrefs.applyTo("series", vm.seriesCategories) }
+    val applied = remember(vm.seriesShows, selectedCat) {
+        if (selectedCat == null) vm.seriesShows
+        else vm.seriesShows.filter { it.categoryId == selectedCat }
+    }
+
+    Row(Modifier.fillMaxSize().background(Bg)) {
+        LazyColumn(Modifier.width(250.dp).fillMaxHeight().background(Sidebar)) {
+            item {
+                Text("Alle Serien",
+                    color = if (selectedCat == null) Accent else TextMid,
+                    fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = null }.padding(16.dp))
+            }
+            items(shownCats) { cat ->
+                Text(cat.name,
+                    color = if (selectedCat == cat.id) Accent else TextMid,
+                    fontWeight = if (selectedCat == cat.id) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 14.sp,
+                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = cat.id }.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+        }
+        Box(Modifier.weight(1f).padding(16.dp)) {
+            if (applied.isEmpty()) {
+                CenteredBox { Text("Keine Serien in dieser Kategorie", color = TextMid) }
+            } else {
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(150.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(18.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(applied, key = { it.seriesId }) { s ->
+                        Column(Modifier.fillMaxWidth().clickable { onOpen(s) }) {
+                            Poster(s.cover, s.name, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                            Spacer(Modifier.height(8.dp))
+                            Text(s.name, color = TextHi, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------- Serien-Detail (Staffeln + Episoden + Download) ----------
+
+@Composable
+fun SeriesDetailScreen(
+    vm: DesktopViewModel,
+    show: SeriesStream,
+    onBack: () -> Unit,
+    onPlayEpisode: (List<SeriesEpisode>, Int) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    var info by remember { mutableStateOf<SeriesInfo?>(null) }
+    var loading by remember { mutableStateOf(true) }
+
+    LaunchedEffect(show.seriesId) {
+        loading = true
+        info = vm.fetchSeriesInfo(show.seriesId)
+        loading = false
+    }
+
+    Column(Modifier.fillMaxSize().background(Bg)) {
+        // Header
+        Row(
+            Modifier.fillMaxWidth().background(Sidebar).padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 16.dp))
+            Text(show.name, color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+
+        Row(Modifier.fillMaxSize()) {
+            // Cover + Beschreibung
+            Column(Modifier.width(240.dp).padding(20.dp)) {
+                Poster(show.cover, show.name, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                Spacer(Modifier.height(14.dp))
+                show.plot?.let { Text(it, color = TextMid, fontSize = 13.sp, maxLines = 6, overflow = TextOverflow.Ellipsis) }
+            }
+
+            // Staffeln + Episoden
+            if (loading) {
+                CenteredBox { CircularProgressIndicator(color = Accent) }
+            } else {
+                val seasons = info?.seasons.orEmpty()
+                if (seasons.isEmpty()) {
+                    CenteredBox { Text("Keine Episoden gefunden", color = TextMid) }
+                } else {
+                    LazyColumn(Modifier.weight(1f).padding(end = 20.dp, top = 20.dp, bottom = 20.dp)) {
+                        seasons.forEach { season ->
+                            item {
+                                Text(season.name ?: "Staffel ${season.seasonNumber ?: ""}",
+                                    color = Accent, fontSize = 17.sp, fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(vertical = 10.dp))
+                            }
+                            items(season.episodes.orEmpty(), key = { it.id }) { ep ->
+                                val all = seasons.flatMap { it.episodes.orEmpty() }
+                                val idx = all.indexOfFirst { it.id == ep.id }
+                                EpisodeRow(vm, show, ep, onPlay = { onPlayEpisode(all, idx) })
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EpisodeRow(vm: DesktopViewModel, show: SeriesStream, ep: SeriesEpisode, onPlay: () -> Unit) {
+    val dlId = "series:${ep.id}"
+    val dlState = VodDownloader.items.firstOrNull { it.id == dlId }
+    val epTitle = ep.title ?: "Episode ${ep.episodeNum}"
+    val scope = rememberCoroutineScope()
+
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 6.dp).clip(RoundedCornerShape(8.dp)).background(Card)
+            .clickable(onClick = onPlay).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("${ep.episodeNum ?: ""}  $epTitle".trimStart(), color = TextHi, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ep.rating?.let { Text("★ $it", color = Accent, fontSize = 11.sp) }
+        }
+        // Download-Button
+        val c = vm.creds
+        val url = c?.seriesUrl(ep.id, ep.containerExtension ?: "mp4")
+        if (url != null) {
+            when (dlState?.status) {
+                "running" -> Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Accent, modifier = Modifier.size(20.dp))
+                    Text("${(dlState.progress * 100).toInt()}%", color = TextMid, fontSize = 11.sp)
+                }
+                "paused" -> Text("▶", color = Accent, fontSize = 18.sp, modifier = Modifier.clickable { VodDownloader.resume(dlId) }.padding(6.dp))
+                "complete" -> Text("✓", color = Color(0xFF6FCF9F), fontSize = 18.sp)
+                "error" -> Text("⚠", color = Danger, fontSize = 18.sp,
+                    modifier = Modifier.clickable { VodDownloader.start(dlId, "$show.name — $epTitle", url, ep.containerExtension ?: "mp4") }.padding(6.dp))
+                else -> Text("⬇", color = TextMid, fontSize = 18.sp,
+                    modifier = Modifier.clickable {
+                        VodDownloader.start(dlId, "$show.name — $epTitle", url, ep.containerExtension ?: "mp4")
+                    }.padding(6.dp))
+            }
+        }
+    }
+}
+
+// ---------- Downloads-Tab ----------
+
+@Composable
+fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String) -> Unit) {
+    LaunchedEffect(Unit) { VodDownloader.load() }
+    var deleteConfirmFor by remember { mutableStateOf<DownloadItem?>(null) }
+
+    val complete = VodDownloader.items.filter { it.status == "complete" }
+
+    Column(Modifier.fillMaxSize().background(Bg).padding(20.dp)) {
+        Text("Offline-Downloads", color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(14.dp))
+
+        if (complete.isEmpty()) {
+            CenteredBox {
+                Text("Noch keine Downloads.\nFilme und Serien-Episoden kannst du in den jeweiligen Bereichen herunterladen.",
+                    color = TextMid, fontSize = 14.sp, textAlign = TextAlign.Center)
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(complete, key = { it.id }) { d ->
+                    val sizeMb = d.downloadedBytes / (1024.0 * 1024.0)
+                    val file = VodDownloader.localFile(d.id)
+                    Row(
+                        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card)
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(d.title, color = TextHi, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(String.format("%.0f MB", sizeMb), color = TextMid, fontSize = 12.sp)
+                        }
+                        if (file != null) {
+                            Text("▶", color = Accent, fontSize = 20.sp,
+                                modifier = Modifier.clickable { onPlay(file, d.title, d.id) }.padding(horizontal = 10.dp))
+                        }
+                        Text("🗑", color = Danger, fontSize = 18.sp,
+                            modifier = Modifier.clickable { deleteConfirmFor = d }.padding(horizontal = 10.dp))
+                    }
+                }
+            }
+        }
+    }
+
+    deleteConfirmFor?.let { d ->
+        AlertDialog(
+            onDismissRequest = { deleteConfirmFor = null },
+            containerColor = Card,
+            title = { Text("Download löschen?", color = TextHi) },
+            text = { Text(d.title, color = TextMid) },
+            confirmButton = {
+                TextButton(onClick = { VodDownloader.delete(d.id); deleteConfirmFor = null }) {
+                    Text("Löschen", color = Danger)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteConfirmFor = null }) { Text("Abbrechen", color = TextMid) }
+            }
+        )
+    }
+}

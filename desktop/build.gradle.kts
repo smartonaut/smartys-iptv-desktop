@@ -33,6 +33,12 @@ kotlin {
                 implementation("org.json:json:20240303")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-swing:1.10.2")
+                // Video-Wiedergabe (libVLC via JNA)
+                implementation("uk.co.caprica:vlcj:4.12.1")
+                implementation("uk.co.caprica:vlcj-natives:4.12.0")
+                // Bilder (Poster/Cover) — Coil 3 multiplatform (3.2.0 = Kotlin 2.1.20, passt zum Projekt)
+                implementation("io.coil-kt.coil3:coil-compose:3.2.0")
+                implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
             }
         }
     }
