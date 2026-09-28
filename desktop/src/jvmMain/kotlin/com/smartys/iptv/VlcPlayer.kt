@@ -49,7 +49,11 @@ class VlcPlayer {
             if (System.getProperty("os.name").lowercase().contains("win")) return null
             return runCatching {
                 val home = File(System.getProperty("user.home"), ".smartys-iptv/libvlc")
-                val marker = File(home, "lib/libvlc.so.5")
+                // Marker = eine Abhängigkeit, die NUR das VOLLSTÄNDIGE Bundle
+                // enthält (das frühere, unvollständige Bundle hatte libdvbpsi
+                // & Co. nicht). So erzwingt der Marker eine Neu-Extraktion,
+                // wenn ein Rechner noch das alte kaputte Bundle liegen hat.
+                val marker = File(home, "lib/libdvbpsi.so.10")
                 if (!marker.exists()) {
                     val zipRes = VlcPlayer::class.java.getResourceAsStream("/libvlc/libvlc-linux-x64.zip")
                         ?: return@runCatching null
