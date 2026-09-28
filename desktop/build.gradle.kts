@@ -51,7 +51,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "SmartysIPTV"
-            packageVersion = "1.4.4"
+            packageVersion = "1.4.5"
             description = "Smartys IPTV — Live-TV, Filme und Serien auf dem Desktop"
             vendor = "Smartys"
 

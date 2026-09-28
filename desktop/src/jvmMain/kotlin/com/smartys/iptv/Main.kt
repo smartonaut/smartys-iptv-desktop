@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import kotlinx.coroutines.launch
 
 // ---------- Farben (identisch zur Android-App) ----------
@@ -236,7 +238,18 @@ fun PairingScreen(vm: DesktopViewModel) {
 }
 
 fun main() = application {
-    Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV") {
+    val icon = loadWindowIcon()
+    Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV", icon = icon) {
         App()
     }
+}
+
+/** Lädt das App-Icon als Fenster-/Taskleisten-Icon (statt GNOME-Zahnrad). */
+private fun loadWindowIcon(): androidx.compose.ui.graphics.painter.Painter? {
+    return runCatching {
+        val bytes = Thread.currentThread().contextClassLoader
+            .getResourceAsStream("icon.png")?.readBytes() ?: return null
+        val bmp = javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(bytes)) ?: return null
+        BitmapPainter(bmp.toComposeImageBitmap())
+    }.getOrNull()
 }
