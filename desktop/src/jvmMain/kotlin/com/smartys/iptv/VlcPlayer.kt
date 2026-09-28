@@ -43,19 +43,39 @@ class VlcPlayer {
     companion object {
         @Volatile private var extracted: String? = null
 
-        /** Extrahiert das gebündelte libVLC und liefert den lib-Ordner (oder null). */
+        private val isWindows =
+            System.getProperty("os.name").lowercase().contains("win")
+
+        /** JNA-Bibliotheksname: vlcj lädt "libvlc" unter Windows, "vlc" sonst. */
+        private val jnaLibName = if (isWindows) "libvlc" else "vlc"
+
+        /** Dateiname der Core-Bibliothek (transitive Abhängigkeit von libvlc). */
+        private val coreFileName = if (isWindows) "libvlccore.dll" else "libvlccore.so.9"
+
+        private val zipResource = if (isWindows)
+            "/libvlc/libvlc-windows-x64.zip" else "/libvlc/libvlc-linux-x64.zip"
+
+        /**
+         * Extrahiert das gebündelte libVLC und liefert den Ordner, der die
+         * Core-Bibliothek enthält (oder null).
+         *
+         * Layout-Unterschied:
+         *  - Windows: flach, alles unter ~/.smartys-iptv/libvlc/ (libvlc.dll,
+         *    libvlccore.dll, plugins/)
+         *  - Linux:   ~/.smartys-iptv/libvlc/lib/ + ../plugins/
+         */
         fun ensureLibVlc(): File? {
             extracted?.let { return File(it) }
-            if (System.getProperty("os.name").lowercase().contains("win")) return null
             return runCatching {
                 val home = File(System.getProperty("user.home"), ".smartys-iptv/libvlc")
-                // Marker = eine Abhängigkeit, die NUR das VOLLSTÄNDIGE Bundle
-                // enthält (das frühere, unvollständige Bundle hatte libdvbpsi
-                // & Co. nicht). So erzwingt der Marker eine Neu-Extraktion,
-                // wenn ein Rechner noch das alte kaputte Bundle liegen hat.
-                val marker = File(home, "lib/libdvbpsi.so.10")
+                // Marker = Datei, die NUR das VOLLSTÄNDIGE Bundle enthält. So
+                // wird bei einer alten/fehlenden Extraktion neu extrahiert.
+                val marker = if (isWindows)
+                    File(home, "libvlccore.dll")
+                else
+                    File(home, "lib/libdvbpsi.so.10")
                 if (!marker.exists()) {
-                    val zipRes = VlcPlayer::class.java.getResourceAsStream("/libvlc/libvlc-linux-x64.zip")
+                    val zipRes = VlcPlayer::class.java.getResourceAsStream(zipResource)
                         ?: return@runCatching null
                     home.mkdirs()
                     ZipInputStream(zipRes).use { zis ->
@@ -73,7 +93,7 @@ class VlcPlayer {
                         }
                     }
                 }
-                val libDir = File(home, "lib")
+                val libDir = if (isWindows) home else File(home, "lib")
                 extracted = libDir.absolutePath
                 libDir
             }.getOrNull()
@@ -84,21 +104,27 @@ class VlcPlayer {
      * Initialisiert die libVLC-Instanz (einmal pro Player). Muss auf dem EDT
      * laufen, da Swing-Komponenten beteiligt sind.
      *
-     * Ladereihenfolge (self-contained): erst libvlccore.so.9 via System.load
-     * (damit der OS-Loader die transitive NEEDED-Abhängigkeit von libvlc.so.5
-     * bereits erfüllt sieht), dann libvlc via JNA-Suchpfad.
+     * Ladereihenfolge (self-contained): erst libvlccore via System.load (damit
+     * der OS-Loader die transitive Abhängigkeit von libvlc bereits erfüllt
+     * sieht), dann libvlc via JNA-Suchpfad. Unter Windows heißt die JNA-Library
+     * "libvlc" (→ libvlc.dll), unter Linux "vlc" (→ libvlc.so).
      */
     fun init(): Boolean {
         if (mediaPlayer != null) return true
         return runCatching {
             val bundled = ensureLibVlc()
             if (bundled != null) {
-                // 1) libvlccore zuerst laden (transitive Abhängigkeit von libvlc.so.5)
-                runCatching { System.load(File(bundled, "libvlccore.so.9").absolutePath) }
+                // 1) libvlccore zuerst laden (transitive Abhängigkeit von libvlc)
+                runCatching { System.load(File(bundled, coreFileName).absolutePath) }
                 // 2) JNA-Suchpfad für libvlc
-                NativeLibrary.addSearchPath("vlc", bundled.absolutePath)
+                NativeLibrary.addSearchPath(jnaLibName, bundled.absolutePath)
                 // 3) Plugin-Pfad über VLC_PLUGIN_PATH (--plugin-path existiert in libVLC 3 nicht mehr)
-                val pluginDir = File(bundled.parentFile, "plugins")
+                //    Windows: plugins/ liegt direkt unter dem libvlc-Ordner.
+                //    Linux:   plugins/ liegt neben dem lib/-Ordner (eine Ebene drüber).
+                val pluginDir = if (isWindows)
+                    File(bundled, "plugins")
+                else
+                    File(bundled.parentFile, "plugins")
                 if (pluginDir.exists()) setenv("VLC_PLUGIN_PATH", pluginDir.absolutePath)
             }
 
@@ -131,8 +157,14 @@ class VlcPlayer {
 
     private fun setenv(name: String, value: String) {
         runCatching {
-            val libc = Native.load("c", LibC::class.java)
-            libc.setenv(name, value, 1)
+            if (isWindows) {
+                // Windows: setenv existiert nicht; Kernel32.SetEnvironmentVariable
+                // (jna-platform ist über vlcj auf dem Classpath).
+                com.sun.jna.platform.win32.Kernel32.INSTANCE.SetEnvironmentVariable(name, value)
+            } else {
+                val libc = Native.load("c", LibC::class.java)
+                libc.setenv(name, value, 1)
+            }
         }
     }
 
