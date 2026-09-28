@@ -51,9 +51,31 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)
             packageName = "SmartysIPTV"
-            packageVersion = "1.4.3"
+            packageVersion = "1.4.4"
             description = "Smartys IPTV — Live-TV, Filme und Serien auf dem Desktop"
             vendor = "Smartys"
+
+            windows {
+                // Installer-Auswahl: Desktop-Verknüpfung + Startmenü-Eintrag als
+                // Checkboxen anbieten, Installationsverzeichnis wählbar machen.
+                shortcut = true
+                menu = true
+                menuGroup = "Smartys"
+                dirChooser = true
+                // Stabiler Upgrade-Code: neuere Versionen installieren sauber
+                // ÜBER die alte (statt sich daneben zu legen).
+                upgradeUuid = "402511a4-d5a1-4e68-8e1f-856c7755498b"
+                // Eigenes App-Icon (statt Compose-Zahnrad-Default)
+                iconFile.set(rootProject.file("branding/logo.ico"))
+            }
+
+            linux {
+                // Eigenes App-Icon (statt Compose-Zahnrad-Default)
+                iconFile.set(rootProject.file("branding/logo_256.png"))
+                // Menüeintrag im Anwendungsmenü anlegen (nicht nur Icon im App-Ordner)
+                shortcut = true
+                menuGroup = "Multimedia;AudioVideo;Video"
+            }
         }
     }
 }

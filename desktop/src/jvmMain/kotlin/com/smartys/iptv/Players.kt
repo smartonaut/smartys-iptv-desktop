@@ -35,10 +35,21 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         SwingPanel(
             factory = {
                 if (!inited) {
-                    inited = true
                     player.videoCanvas = canvas
-                    if (player.init()) {
-                        player.play(url, isVod = false)
+                    // vlcj verlangt, dass der Canvas "displayable" ist, bevor
+                    // die Video-Surface erzeugt wird. Im SwingPanel-factory ist
+                    // er das noch nicht (Fenster noch nicht sichtbar) → erst
+                    // beim HierarchyEvent initialisieren + abspielen.
+                    if (canvas.isDisplayable) {
+                        inited = true
+                        if (player.init()) player.play(url, isVod = false)
+                    } else {
+                        canvas.addHierarchyListener { _ ->
+                            if (!inited && canvas.isDisplayable) {
+                                inited = true
+                                if (player.init()) player.play(url, isVod = false)
+                            }
+                        }
                     }
                 }
                 canvas
@@ -101,23 +112,36 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         SwingPanel(
             factory = {
                 if (!inited) {
-                    inited = true
                     player.videoCanvas = canvas
-                    if (player.init()) {
-                        val advance = {
-                            vm.markWatched(vp.streamId)
-                            vp.next?.invoke()
+                    // Start erst, wenn der Canvas displayable ist (siehe
+                    // LivePlayerScreen): vlcj braucht eine sichtbare Surface.
+                    val doStart = {
+                        if (!inited) {
+                            inited = true
+                            if (player.init()) {
+                                val advance = {
+                                    vm.markWatched(vp.streamId)
+                                    vp.next?.invoke()
+                                }
+                                // Auto-Advance: Abspann-Erkennung (nur bei Serien mit Folge)
+                                // Fallback: natürliches Ende des Streams.
+                                player.onVodEnded = { advance() }
+                                if (vp.next != null) {
+                                    val w = CreditsWatcher(player) { advance() }
+                                    watcher = w
+                                    scope.launch { w.run() }
+                                }
+                                player.play(vp.url, isVod = true)
+                                if (startPos > 0) player.seekTo(startPos)
+                            }
                         }
-                        // Auto-Advance: Abspann-Erkennung (nur bei Serien mit Folge)
-                        // Fallback: natürliches Ende des Streams.
-                        player.onVodEnded = { advance() }
-                        if (vp.next != null) {
-                            val w = CreditsWatcher(player) { advance() }
-                            watcher = w
-                            scope.launch { w.run() }
+                    }
+                    if (canvas.isDisplayable) {
+                        doStart()
+                    } else {
+                        canvas.addHierarchyListener { _ ->
+                            if (canvas.isDisplayable) doStart()
                         }
-                        player.play(vp.url, isVod = true)
-                        if (startPos > 0) player.seekTo(startPos)
                     }
                 }
                 canvas
