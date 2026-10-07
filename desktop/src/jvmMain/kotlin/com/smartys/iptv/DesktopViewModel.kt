@@ -62,6 +62,22 @@ class DesktopViewModel {
     val xmltvReady = mutableStateOf(false)
     val fallbackReady = mutableStateOf(false)
 
+    // Aufnahme-Scheduler (nutzt die im Timer gespeicherte Stream-URL; läuft in
+    // der App UND headless im RecordingDaemon)
+    private val scheduler = RecordingScheduler()
+
+    /** Startet den Scheduler-Tick-Loop (einmal pro App-Lauf aufrufen). */
+    fun startScheduler() {
+        scope.launch {
+            while (true) {
+                scheduler.tick()
+                kotlinx.coroutines.delay(10_000)
+            }
+        }
+    }
+
+    fun isRecording(): Boolean = scheduler.isRecording()
+
     private fun buildApi(c: CredStore.Creds): XtreamApi {
         val client = okhttp3.OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS)

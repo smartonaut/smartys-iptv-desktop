@@ -53,4 +53,14 @@ object AppSettings {
     }
 
     fun setTimeshiftDir(path: String) = set("timeshift_dir", path)
+
+    // ---------- Aufnahme-Verzeichnis (dauerhafte Aufnahmen) ----------
+
+    /** Zielverzeichnis für dauerhafte Aufnahmen. Default: ~/.smartys-iptv/recordings */
+    fun recordingsDir(): String {
+        val def = File(dir(), "recordings").absolutePath
+        return get("recordings_dir", def)
+    }
+
+    fun setRecordingsDir(path: String) = set("recordings_dir", path)
 }

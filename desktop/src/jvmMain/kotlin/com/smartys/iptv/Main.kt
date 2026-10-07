@@ -33,7 +33,7 @@ val Danger = Color(0xFFFF6B6B)
 // ---------- Navigation ----------
 
 enum class Tab(val label: String) {
-    LIVE("Live-TV"), MOVIES("Filme"), SERIES("Serien"), DOWNLOADS("Downloads"), SETTINGS("Einstellungen")
+    LIVE("Live-TV"), MOVIES("Filme"), SERIES("Serien"), DOWNLOADS("Downloads"), RECORDINGS("Aufnahmen"), SETTINGS("Einstellungen")
 }
 
 data class VodPlaying(
@@ -49,7 +49,7 @@ data class VodPlaying(
 @Composable
 fun App() {
     val vm = remember { DesktopViewModel() }
-    LaunchedEffect(Unit) { vm.restoreSession() }
+    LaunchedEffect(Unit) { vm.restoreSession(); vm.startScheduler() }
 
     var tab by remember { mutableStateOf(Tab.LIVE) }
     var liveChannel by remember { mutableStateOf<LiveStream?>(null) }
@@ -91,6 +91,7 @@ fun App() {
                                     onPlay = { file, title, id ->
                                         vodPlaying = VodPlaying(title, file.toURI().toString(), "vod:download:$id", id, null, false, null)
                                     })
+                                Tab.RECORDINGS -> RecordingsScreen(vm, s)
                                 Tab.SETTINGS -> SettingsScreen(vm)
                             }
                         }
@@ -257,11 +258,18 @@ fun PairingScreen(vm: DesktopViewModel) {
     }
 }
 
-fun main() = application {
-    extractReadme()
-    val icon = loadWindowIcon()
-    Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV", icon = icon) {
-        App()
+fun main(args: Array<String>) {
+    // Headless-Aufnahme-Daemon: Aufnahmen laufen auch bei geschlossener App.
+    if (args.contains("--recording-daemon")) {
+        runRecordingDaemon()
+        return
+    }
+    application {
+        extractReadme()
+        val icon = loadWindowIcon()
+        Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV", icon = icon) {
+            App()
+        }
     }
 }
 

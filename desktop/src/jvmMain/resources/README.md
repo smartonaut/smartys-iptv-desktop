@@ -53,6 +53,11 @@ Pause + Zurückspulen am laufenden Kanal sind dann möglich.
 
 ## Versionslog
 
+### 1.5.0
+- **Geplante Aufnahmen (Timer):** Sendungen aus dem EPG aufnehmen oder manuell
+  (Kanal + Startzeit + Dauer) planen. Aufnahmen starten auch bei geschlossener
+  App (Hintergrund-Daemon). Aufnahmeverzeichnis in den Einstellungen wählbar.
+
 ### 1.4.7
 - **Live-TV-Pause (Timeshift):** Stream wird auf Wunsch auf die Platte gepuffert,
   Pause + Zurückspulen am Live-Kanal möglich. An/aus + Aufnahmepfad in den Einstellungen.

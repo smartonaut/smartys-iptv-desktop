@@ -117,6 +117,25 @@ fun SettingsScreen(vm: DesktopViewModel) {
             timeshiftDir = AppSettings.timeshiftDir()
         }) { Text("Pfad speichern", color = Accent) }
 
+        Spacer(Modifier.height(16.dp))
+
+        // ---- Aufnahme-Verzeichnis (dauerhafte Aufnahmen) ----
+        Text("Aufnahme-Verzeichnis", color = TextMid, fontSize = 13.sp)
+        Spacer(Modifier.height(4.dp))
+        var recDir by remember { mutableStateOf(AppSettings.recordingsDir()) }
+        OutlinedTextField(
+            value = recDir,
+            onValueChange = { recDir = it },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Zielordner für geplante Aufnahmen") }
+        )
+        Spacer(Modifier.height(6.dp))
+        TextButton(onClick = {
+            AppSettings.setRecordingsDir(recDir.trim())
+            recDir = AppSettings.recordingsDir()
+        }) { Text("Pfad speichern", color = Accent) }
+
         Spacer(Modifier.height(24.dp))
 
         // ---- Verwaltung zurücksetzen ----
