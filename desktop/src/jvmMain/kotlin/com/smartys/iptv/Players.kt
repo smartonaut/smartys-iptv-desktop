@@ -18,6 +18,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -178,6 +183,7 @@ private fun VolumeArrows(onUp: () -> Unit, onDown: () -> Unit) {
 @Composable
 private fun EdgeStrip(
     valueLabel: String,
+    fraction: Float,
     onIncrement: () -> Unit,
     onDecrement: () -> Unit,
     modifier: Modifier
@@ -187,12 +193,25 @@ private fun EdgeStrip(
     Box(modifier.hoverable(interaction)) {
         if (hovered) {
             Column(
-                Modifier.fillMaxHeight().width(44.dp).background(Color(0xAA0B0E14)),
+                Modifier.fillMaxHeight().width(44.dp).background(Color(0x660B0E14)),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Text("▲", color = Accent, fontSize = 20.sp,
                     modifier = Modifier.clickable(onClick = onIncrement).padding(vertical = 10.dp))
+                // Pegelbalken (vertikal, auf leicht dunklem Track für Kontrast)
+                Box(
+                    Modifier.width(10.dp).height(120.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(Color(0x66FFFFFF))
+                ) {
+                    Box(
+                        Modifier.align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .fillMaxHeight(fraction.coerceIn(0f, 1f))
+                            .background(Accent)
+                    )
+                }
                 Text(valueLabel, color = TextHi, fontSize = 12.sp)
                 Text("▼", color = Accent, fontSize = 20.sp,
                     modifier = Modifier.clickable(onClick = onDecrement).padding(vertical = 10.dp))
@@ -219,21 +238,21 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     var recMode by remember { mutableStateOf<AdhocRecMode?>(null) }  // null = keine Aufnahme
     var showRecDialog by remember { mutableStateOf(false) }
 
-    EscapeToBack(onBack)
+    // ---- OSD: beim Kanalstart kurz Kanalname + laufende Sendung unten einblenden ----
+    var showNowPlaying by remember { mutableStateOf(false) }
+    val nowNextTitle = remember { mutableStateOf<String?>(null) }
 
-    VolumeArrows(
-        onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
-        onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
-    )
+    // (Tasten ESC/R/S sowie Pfeile werden nativ über onPreviewKeyEvent im Box-Modifier verarbeitet)
 
-    // R = Aufnahme-Dialog, S = Aufnahme stoppen
-    RecordKeys(
-        onStartRequest = { showRecDialog = true },
-        onStop = {
-            recEngine.stop()
-            recMode = null
-        }
-    )
+    // OSD beim Kanalstart: Titel laden + 4s einblenden
+    LaunchedEffect(ch.streamId) {
+        nowNextTitle.value = runCatching {
+            XmltvEpg.getNowAndNext(ch.epgChannelId).first?.title
+        }.getOrNull()
+        showNowPlaying = true
+        kotlinx.coroutines.delay(4000)
+        showNowPlaying = false
+    }
 
     // Bei „laufende Sendung": automatisch am EPG-Ende stoppen
     LaunchedEffect(recMode) {
@@ -254,7 +273,18 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color.Black)
+        .onPreviewKeyEvent { ev ->
+            if (ev.type == KeyEventType.KeyDown) {
+                when (ev.key) {
+                    Key.R -> { showRecDialog = true; true }
+                    Key.S -> { recEngine.stop(); recMode = null; true }
+                    Key.Escape -> { onBack(); true }
+                    else -> false
+                }
+            } else false
+        }
+    ) {
         SwingPanel(
             factory = {
                 if (!inited) {
@@ -293,6 +323,20 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 }.padding(horizontal = 10.dp))
         }
 
+        // OSD: Kanalname + laufende Sendung (kurz nach Umschalten, unten)
+        if (showNowPlaying) {
+            Column(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
+                    .background(Color(0x66000000))
+                    .padding(horizontal = 16.dp, vertical = 12.dp)
+            ) {
+                Text(ch.name, color = TextHi, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                nowNextTitle.value?.let {
+                    Text(it, color = Accent, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+
         // Aufnahme-Indikator (erscheint während einer Ad-hoc-Aufnahme)
         if (recMode != null) {
             Row(
@@ -310,12 +354,14 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         // Rand-Steuerung: links Helligkeit, rechts Lautstärke
         EdgeStrip(
             valueLabel = "🔆 ${(brightness * 100).toInt()}%",
+            fraction = (brightness / 2.0f).coerceIn(0f, 1f),
             onIncrement = { brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness) },
             onDecrement = { brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness) },
             modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
         )
         EdgeStrip(
             valueLabel = "🔊 $volume%",
+            fraction = volume / 100f,
             onIncrement = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
             onDecrement = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) },
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
@@ -370,14 +416,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         vp.forceStartPos ?: ResumeStore.position(vp.key)
     }
 
-    EscapeToBack(onBack)
-
-    ArrowSeek(player)
-
-    VolumeArrows(
-        onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
-        onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
-    )
+    // (Tasten ESC/Pfeile werden nativ über onPreviewKeyEvent im Box-Modifier verarbeitet)
 
     DisposableEffect(Unit) {
         onDispose {
@@ -396,7 +435,26 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
+    Box(Modifier.fillMaxSize().background(Color.Black)
+        .onPreviewKeyEvent { ev ->
+            if (ev.type == KeyEventType.KeyDown) {
+                when (ev.key) {
+                    Key.Escape -> { onBack(); true }
+                    Key.DirectionLeft -> {
+                        val dur = player.durationMs()
+                        if (dur > 0) player.seekTo((player.currentPositionMs() - 10_000).coerceIn(0L, dur)); true
+                    }
+                    Key.DirectionRight -> {
+                        val dur = player.durationMs()
+                        if (dur > 0) player.seekTo((player.currentPositionMs() + 10_000).coerceIn(0L, dur)); true
+                    }
+                    Key.DirectionUp -> { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume); true }
+                    Key.DirectionDown -> { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); true }
+                    else -> false
+                }
+            } else false
+        }
+    ) {
         SwingPanel(
             factory = {
                 if (!inited) {
@@ -480,12 +538,14 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         // Rand-Steuerung: links Helligkeit, rechts Lautstärke
         EdgeStrip(
             valueLabel = "🔆 ${(brightness * 100).toInt()}%",
+            fraction = (brightness / 2.0f).coerceIn(0f, 1f),
             onIncrement = { brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness) },
             onDecrement = { brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness) },
             modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
         )
         EdgeStrip(
             valueLabel = "🔊 $volume%",
+            fraction = volume / 100f,
             onIncrement = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
             onDecrement = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) },
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
