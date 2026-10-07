@@ -7,6 +7,7 @@ import uk.co.caprica.vlcj.factory.MediaPlayerFactory
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
 import uk.co.caprica.vlcj.player.base.DeinterlaceMode
+import uk.co.caprica.vlcj.player.base.MarqueePosition
 import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
 import java.awt.Canvas
 import java.io.File
@@ -256,6 +257,31 @@ class VlcPlayer {
 
     fun brightness(): Float =
         mediaPlayer?.video()?.brightness() ?: 1.0f
+
+    /**
+     * OSD direkt ins Videobild (libVLC Marquee). Im Gegensatz zu Compose-Overlays
+     * verschwindet das NICHT hinter dem heavyweight Video-Canvas — libVLC zeichnet
+     * es in den Frame. timeoutMs = 0 blendet nie automatisch aus.
+     */
+    fun showOsd(text: String, timeoutMs: Int = 0,
+                position: MarqueePosition = MarqueePosition.BOTTOM,
+                color: java.awt.Color = java.awt.Color.WHITE) {
+        val mp = mediaPlayer ?: return
+        runCatching {
+            val m = mp.marquee()
+            m.setColour(color)
+            m.setSize(28)
+            m.setOpacity(230)
+            m.setTimeout(timeoutMs)
+            m.setPosition(position)
+            m.setText(text)
+            m.enable(true)
+        }
+    }
+
+    fun hideOsd() {
+        runCatching { mediaPlayer?.marquee()?.enable(false) }
+    }
 
     /** Frame-Grab für die Abspann-Erkennung (Downsample 48×27). */
     fun snapshot(): java.awt.image.BufferedImage? =

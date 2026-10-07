@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import uk.co.caprica.vlcj.player.base.MarqueePosition
 import java.awt.Canvas
 import java.awt.KeyboardFocusManager
 import java.awt.KeyEventDispatcher
@@ -233,30 +234,61 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     var recMode by remember { mutableStateOf<AdhocRecMode?>(null) }  // null = keine Aufnahme
     var showRecDialog by remember { mutableStateOf(false) }
 
-    // ---- OSD: beim Kanalstart kurz Kanalname + laufende Sendung unten einblenden ----
-    var showNowPlaying by remember { mutableStateOf(false) }
-    val nowNextTitle = remember { mutableStateOf<String?>(null) }
-
     EscapeToBack(onBack)
 
-    VolumeArrows(
-        onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
-        onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
-    )
+    // Live-TV-Tasten: ↑/↓ = Lautstärke, ←/→ = Helligkeit (im Live-TV kein Seek).
+    // Feedback läuft über libVLC-Marquee (ins Videobild), da Compose-Overlays
+    // hinter dem heavyweight Video-Canvas unsichtbar bleiben.
+    val liveTvDispatcher = remember {
+        object : KeyEventDispatcher {
+            override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+                if (e.id != KeyEvent.KEY_PRESSED) return false
+                when (e.keyCode) {
+                    KeyEvent.VK_UP -> {
+                        volume = (volume + 10).coerceAtMost(100); player.setVolume(volume)
+                        player.showOsd("Lautstärke  $volume%", 1500)
+                        return true
+                    }
+                    KeyEvent.VK_DOWN -> {
+                        volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume)
+                        player.showOsd("Lautstärke  $volume%", 1500)
+                        return true
+                    }
+                    KeyEvent.VK_LEFT -> {
+                        brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness)
+                        player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500)
+                        return true
+                    }
+                    KeyEvent.VK_RIGHT -> {
+                        brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness)
+                        player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500)
+                        return true
+                    }
+                }
+                return false
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        val mgr = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        mgr.addKeyEventDispatcher(liveTvDispatcher)
+        onDispose { mgr.removeKeyEventDispatcher(liveTvDispatcher) }
+    }
 
     RecordKeys(
         onStartRequest = { showRecDialog = true },
         onStop = { recEngine.stop(); recMode = null }
     )
 
-    // OSD beim Kanalstart: Titel laden + 4s einblenden
-    LaunchedEffect(ch.streamId) {
-        nowNextTitle.value = runCatching {
+    // OSD beim Kanalstart: sobald der Player initialisiert ist (inited), Kanalname
+    // + laufende Sendung via Marquee einblenden.
+    LaunchedEffect(inited) {
+        if (!inited) return@LaunchedEffect
+        val title = runCatching {
             XmltvEpg.getNowAndNext(ch.epgChannelId).first?.title
         }.getOrNull()
-        showNowPlaying = true
-        kotlinx.coroutines.delay(4000)
-        showNowPlaying = false
+        val osd = if (title.isNullOrBlank()) ch.name else "${ch.name}  —  $title"
+        player.showOsd(osd, 4000)
     }
 
     // Bei „laufende Sendung": automatisch am EPG-Ende stoppen
@@ -317,49 +349,17 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 }.padding(horizontal = 10.dp))
         }
 
-        // OSD: Kanalname + laufende Sendung (kurz nach Umschalten, unten)
-        if (showNowPlaying) {
-            Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth()
-                    .background(Color(0x66000000))
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
-            ) {
-                Text(ch.name, color = TextHi, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                nowNextTitle.value?.let {
-                    Text(it, color = Accent, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
+        // OSD + Pegel + Aufnahme-Status laufen über libVLC-Marquee (ins Videobild),
+        // da Compose-Overlays hinter dem heavyweight Video-Canvas unsichtbar bleiben.
+        // REC-Indikator als Marquee oben rechts anzeigen.
+        LaunchedEffect(recMode) {
+            if (recMode != null) {
+                player.showOsd("● REC  ${if (recMode == AdhocRecMode.CURRENT_SHOW) "Sendung" else "endlos"}",
+                    timeoutMs = 0, position = MarqueePosition.TOP_RIGHT, color = java.awt.Color.RED)
+            } else {
+                player.hideOsd()
             }
         }
-
-        // Aufnahme-Indikator (erscheint während einer Ad-hoc-Aufnahme)
-        if (recMode != null) {
-            Row(
-                Modifier.align(Alignment.TopEnd).padding(top = 52.dp, end = 12.dp)
-                    .clip(RoundedCornerShape(6.dp)).background(Color(0xCC11172A)).padding(horizontal = 10.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("● REC", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                Spacer(Modifier.width(6.dp))
-                Text(if (recMode == AdhocRecMode.CURRENT_SHOW) "Sendung" else "endlos",
-                    color = TextHi, fontSize = 12.sp)
-            }
-        }
-
-        // Rand-Steuerung: links Helligkeit, rechts Lautstärke
-        EdgeStrip(
-            valueLabel = "🔆 ${(brightness * 100).toInt()}%",
-            fraction = (brightness / 2.0f).coerceIn(0f, 1f),
-            onIncrement = { brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness) },
-            onDecrement = { brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness) },
-            modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
-        )
-        EdgeStrip(
-            valueLabel = "🔊 $volume%",
-            fraction = volume / 100f,
-            onIncrement = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
-            onDecrement = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) },
-            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-        )
     }
 
     // Aufnahme-Dialog (R gedrückt): laufende Sendung vs. endlos
@@ -395,7 +395,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
 @Composable
 fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
     val player = remember { VlcPlayer() }
-    val canvas = remember { Canvas() }
+    val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var positionMs by remember { mutableStateOf(0L) }
