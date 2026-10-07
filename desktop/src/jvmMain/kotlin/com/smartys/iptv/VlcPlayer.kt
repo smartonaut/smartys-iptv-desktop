@@ -172,12 +172,22 @@ class VlcPlayer {
         fun setenv(name: String, value: String, overwrite: Int): Int
     }
 
-    /** Stream/MRL abspielen. isVod = true verhindert Reconnect und feuert onVodEnded. */
-    fun play(url: String, isVod: Boolean = false) {
+    /** Stream/MRL abspielen. isVod = true verhindert Reconnect und feuert onVodEnded.
+     *  timeshift = true puffert den Stream auf die Platte (libVLC input-timeshift),
+     *  sodass Pause + Zurückspulen am Live-Kanal möglich sind. */
+    fun play(url: String, isVod: Boolean = false, timeshift: Boolean = false, timeshiftDir: String? = null) {
         val mp = mediaPlayer ?: return
         currentUrl = url
         currentIsVod = isVod
-        mp.media().play(url)
+        if (timeshift) {
+            val opts = mutableListOf(":input-timeshift-access=file")
+            timeshiftDir?.takeIf { it.isNotBlank() }?.let {
+                opts.add(":input-timeshift-dir=$it")
+            }
+            mp.media().play(url, *opts.toTypedArray())
+        } else {
+            mp.media().play(url)
+        }
     }
 
     fun pause() {

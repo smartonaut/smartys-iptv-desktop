@@ -153,6 +153,8 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     var paused by remember { mutableStateOf(false) }
     var volume by remember { mutableStateOf(100) }
     var brightness by remember { mutableStateOf(1.0f) }
+    val timeshift = remember { AppSettings.timeshiftEnabled() }
+    val timeshiftDir = remember { AppSettings.timeshiftDir() }
 
     EscapeToBack(onBack)
 
@@ -171,14 +173,15 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 if (!inited) {
                     player.videoCanvas = canvas
                     attachDoubleClickToBack(canvas, onBack)
+                    val start = { if (player.init()) player.play(url, isVod = false, timeshift = timeshift, timeshiftDir = timeshiftDir) }
                     if (canvas.isDisplayable) {
                         inited = true
-                        if (player.init()) player.play(url, isVod = false)
+                        start()
                     } else {
                         canvas.addHierarchyListener { _ ->
                             if (!inited && canvas.isDisplayable) {
                                 inited = true
-                                if (player.init()) player.play(url, isVod = false)
+                                start()
                             }
                         }
                     }

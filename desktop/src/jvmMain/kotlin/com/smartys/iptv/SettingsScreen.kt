@@ -81,6 +81,44 @@ fun SettingsScreen(vm: DesktopViewModel) {
 
         Spacer(Modifier.height(24.dp))
 
+        // ---- Live-TV-Timeshift (Pause am Live-Kanal) ----
+        Text("Live-TV-Pause (Timeshift)", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        var timeshiftEnabled by remember { mutableStateOf(AppSettings.timeshiftEnabled()) }
+        var timeshiftDir by remember { mutableStateOf(AppSettings.timeshiftDir()) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = timeshiftEnabled,
+                onCheckedChange = { on ->
+                    timeshiftEnabled = on
+                    AppSettings.setTimeshiftEnabled(on)
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Color(0x55FFC94D))
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                if (timeshiftEnabled) "aktiv — Stream wird auf die Platte gepuffert" else "aus",
+                color = TextMid, fontSize = 13.sp
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text("Aufnahmepfad:", color = TextMid, fontSize = 13.sp)
+        Spacer(Modifier.height(4.dp))
+        OutlinedTextField(
+            value = timeshiftDir,
+            onValueChange = { timeshiftDir = it },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Verzeichnis für den Timeshift-Puffer") }
+        )
+        Spacer(Modifier.height(6.dp))
+        TextButton(onClick = {
+            AppSettings.setTimeshiftDir(timeshiftDir.trim())
+            timeshiftDir = AppSettings.timeshiftDir()
+        }) { Text("Pfad speichern", color = Accent) }
+
+        Spacer(Modifier.height(24.dp))
+
         // ---- Verwaltung zurücksetzen ----
         Text("Verwaltung", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))

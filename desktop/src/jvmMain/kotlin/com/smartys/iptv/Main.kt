@@ -258,9 +258,24 @@ fun PairingScreen(vm: DesktopViewModel) {
 }
 
 fun main() = application {
+    extractReadme()
     val icon = loadWindowIcon()
     Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV", icon = icon) {
         App()
+    }
+}
+
+/** Extrahiert die gebündelte README (Versionslog + Steuerung) beim ersten Start
+ *  nach ~/.smartys-iptv/README.md, damit sie nach der Installation auffindbar ist. */
+private fun extractReadme() {
+    runCatching {
+        val home = java.io.File(System.getProperty("user.home"), ".smartys-iptv")
+        val target = java.io.File(home, "README.md")
+        if (target.exists()) return
+        val bytes = Thread.currentThread().contextClassLoader
+            .getResourceAsStream("README.md")?.readBytes() ?: return
+        home.mkdirs()
+        target.writeBytes(bytes)
     }
 }
 
