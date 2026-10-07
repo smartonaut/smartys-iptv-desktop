@@ -15,6 +15,8 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import kotlinx.coroutines.launch
 
 // ---------- Farben (identisch zur Android-App) ----------
@@ -178,6 +180,8 @@ fun PairingScreen(vm: DesktopViewModel) {
     val pairingPw = remember { CredStore.pairingPw() }
     var busy by remember { mutableStateOf(false) }
     var msg by remember { mutableStateOf<String?>(null) }
+    var copied by remember { mutableStateOf<String?>(null) }
+    val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
     Column(
@@ -195,10 +199,26 @@ fun PairingScreen(vm: DesktopViewModel) {
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Deine Player-ID", color = TextMid, fontSize = 13.sp)
-            Text(playerId, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextHi)
+            Text(
+                playerId, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextHi,
+                modifier = Modifier.clickable {
+                    clipboard.setText(AnnotatedString(playerId))
+                    copied = "Player-ID kopiert"
+                }
+            )
             Spacer(Modifier.height(14.dp))
             Text("Dein Passwort", color = TextMid, fontSize = 13.sp)
-            Text(pairingPw, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Accent)
+            Text(
+                pairingPw, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Accent,
+                modifier = Modifier.clickable {
+                    clipboard.setText(AnnotatedString(pairingPw))
+                    copied = "Passwort kopiert"
+                }
+            )
+            copied?.let {
+                Spacer(Modifier.height(6.dp))
+                Text(it, color = Accent, fontSize = 12.sp)
+            }
         }
         Spacer(Modifier.height(24.dp))
 
