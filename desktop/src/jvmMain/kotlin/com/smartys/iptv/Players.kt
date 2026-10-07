@@ -93,6 +93,29 @@ private fun ArrowSeek(player: VlcPlayer) {
     }
 }
 
+/** Pfeil hoch/runter = Lautstärke +10/-10. */
+@Composable
+private fun VolumeArrows(onUp: () -> Unit, onDown: () -> Unit) {
+    val dispatcher = remember {
+        object : KeyEventDispatcher {
+            override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+                if (e.id == KeyEvent.KEY_PRESSED) {
+                    when (e.keyCode) {
+                        KeyEvent.VK_UP -> { onUp(); return true }
+                        KeyEvent.VK_DOWN -> { onDown(); return true }
+                    }
+                }
+                return false
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        val mgr = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        mgr.addKeyEventDispatcher(dispatcher)
+        onDispose { mgr.removeKeyEventDispatcher(dispatcher) }
+    }
+}
+
 /** Rand-Streifen: bei Hover erscheint ▲/Wert/▼; Klick auf ▲/▼ verstellt den Wert. */
 @Composable
 private fun EdgeStrip(
@@ -132,6 +155,11 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     var brightness by remember { mutableStateOf(1.0f) }
 
     EscapeToBack(onBack)
+
+    VolumeArrows(
+        onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
+        onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
+    )
 
     DisposableEffect(Unit) {
         onDispose { player.release() }
@@ -211,6 +239,11 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
     EscapeToBack(onBack)
 
     ArrowSeek(player)
+
+    VolumeArrows(
+        onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
+        onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
+    )
 
     DisposableEffect(Unit) {
         onDispose {
