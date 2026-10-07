@@ -64,6 +64,35 @@ private fun attachDoubleClickToBack(canvas: Canvas, onBack: () -> Unit) {
     })
 }
 
+/** Pfeiltasten bei VOD: Links = -10s, Rechts = +10s (an die Länge geklemmt). */
+@Composable
+private fun ArrowSeek(player: VlcPlayer) {
+    val dispatcher = remember(player) {
+        object : KeyEventDispatcher {
+            override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+                if (e.id == KeyEvent.KEY_PRESSED) {
+                    when (e.keyCode) {
+                        KeyEvent.VK_LEFT -> { seekBy(-10_000); return true }
+                        KeyEvent.VK_RIGHT -> { seekBy(10_000); return true }
+                    }
+                }
+                return false
+            }
+            private fun seekBy(deltaMs: Long) {
+                val dur = player.durationMs()
+                if (dur <= 0) return
+                val target = (player.currentPositionMs() + deltaMs).coerceIn(0L, dur)
+                player.seekTo(target)
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        val mgr = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        mgr.addKeyEventDispatcher(dispatcher)
+        onDispose { mgr.removeKeyEventDispatcher(dispatcher) }
+    }
+}
+
 /** Rand-Streifen: bei Hover erscheint ▲/Wert/▼; Klick auf ▲/▼ verstellt den Wert. */
 @Composable
 private fun EdgeStrip(
@@ -180,6 +209,8 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
     val startPos = remember(vp.key) { ResumeStore.position(vp.key) }
 
     EscapeToBack(onBack)
+
+    ArrowSeek(player)
 
     DisposableEffect(Unit) {
         onDispose {
