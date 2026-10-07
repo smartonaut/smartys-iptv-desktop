@@ -18,11 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -242,7 +237,17 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     var showNowPlaying by remember { mutableStateOf(false) }
     val nowNextTitle = remember { mutableStateOf<String?>(null) }
 
-    // (Tasten ESC/R/S sowie Pfeile werden nativ über onPreviewKeyEvent im Box-Modifier verarbeitet)
+    EscapeToBack(onBack)
+
+    VolumeArrows(
+        onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
+        onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
+    )
+
+    RecordKeys(
+        onStartRequest = { showRecDialog = true },
+        onStop = { recEngine.stop(); recMode = null }
+    )
 
     // OSD beim Kanalstart: Titel laden + 4s einblenden
     LaunchedEffect(ch.streamId) {
@@ -273,18 +278,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)
-        .onPreviewKeyEvent { ev ->
-            if (ev.type == KeyEventType.KeyDown) {
-                when (ev.key) {
-                    Key.R -> { showRecDialog = true; true }
-                    Key.S -> { recEngine.stop(); recMode = null; true }
-                    Key.Escape -> { onBack(); true }
-                    else -> false
-                }
-            } else false
-        }
-    ) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         SwingPanel(
             factory = {
                 if (!inited) {
@@ -416,7 +410,14 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         vp.forceStartPos ?: ResumeStore.position(vp.key)
     }
 
-    // (Tasten ESC/Pfeile werden nativ über onPreviewKeyEvent im Box-Modifier verarbeitet)
+    EscapeToBack(onBack)
+
+    ArrowSeek(player)
+
+    VolumeArrows(
+        onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
+        onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
+    )
 
     DisposableEffect(Unit) {
         onDispose {
@@ -435,26 +436,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Color.Black)
-        .onPreviewKeyEvent { ev ->
-            if (ev.type == KeyEventType.KeyDown) {
-                when (ev.key) {
-                    Key.Escape -> { onBack(); true }
-                    Key.DirectionLeft -> {
-                        val dur = player.durationMs()
-                        if (dur > 0) player.seekTo((player.currentPositionMs() - 10_000).coerceIn(0L, dur)); true
-                    }
-                    Key.DirectionRight -> {
-                        val dur = player.durationMs()
-                        if (dur > 0) player.seekTo((player.currentPositionMs() + 10_000).coerceIn(0L, dur)); true
-                    }
-                    Key.DirectionUp -> { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume); true }
-                    Key.DirectionDown -> { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); true }
-                    else -> false
-                }
-            } else false
-        }
-    ) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         SwingPanel(
             factory = {
                 if (!inited) {
