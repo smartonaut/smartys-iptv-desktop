@@ -204,6 +204,22 @@ class VlcPlayer {
     fun durationMs(): Long =
         mediaPlayer?.status()?.length() ?: 0L
 
+    /** Lautstärke (0–200, 100 = normal). */
+    fun setVolume(v: Int) {
+        mediaPlayer?.audio()?.setVolume(v)
+    }
+
+    fun volume(): Int =
+        mediaPlayer?.audio()?.volume() ?: 100
+
+    /** Helligkeit (0.0–2.0, 1.0 = neutral). */
+    fun setBrightness(b: Float) {
+        mediaPlayer?.video()?.setBrightness(b)
+    }
+
+    fun brightness(): Float =
+        mediaPlayer?.video()?.brightness() ?: 1.0f
+
     /** Frame-Grab für die Abspann-Erkennung (Downsample 48×27). */
     fun snapshot(): java.awt.image.BufferedImage? =
         runCatching { mediaPlayer?.snapshots()?.get(48, 27) }.getOrNull()

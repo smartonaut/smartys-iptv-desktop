@@ -2,6 +2,9 @@ package com.smartys.iptv
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
@@ -17,6 +20,76 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.awt.Canvas
+import java.awt.KeyboardFocusManager
+import java.awt.KeyEventDispatcher
+import java.awt.event.KeyEvent
+import java.awt.event.MouseAdapter
+import java.awt.event.MouseEvent
+import javax.swing.SwingUtilities
+
+// ---------- Gemeinsame Player-Gesten ----------
+
+/**
+ * ESC (global) → onBack. Wird als AWT-KeyEventDispatcher registriert, damit die
+ * Taste auch greift, wenn der eingebettete Video-Canvas (Swing) den Fokus hält.
+ */
+@Composable
+private fun EscapeToBack(onBack: () -> Unit) {
+    val dispatcher = remember {
+        object : KeyEventDispatcher {
+            override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+                if (e.id == KeyEvent.KEY_PRESSED && e.keyCode == KeyEvent.VK_ESCAPE) {
+                    onBack()
+                    return true
+                }
+                return false
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        val mgr = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        mgr.addKeyEventDispatcher(dispatcher)
+        onDispose { mgr.removeKeyEventDispatcher(dispatcher) }
+    }
+}
+
+/** Doppelklick auf dem Video-Canvas → onBack. */
+private fun attachDoubleClickToBack(canvas: Canvas, onBack: () -> Unit) {
+    canvas.addMouseListener(object : MouseAdapter() {
+        override fun mouseClicked(e: MouseEvent) {
+            if (e.clickCount >= 2) {
+                SwingUtilities.invokeLater { onBack() }
+            }
+        }
+    })
+}
+
+/** Rand-Streifen: bei Hover erscheint ▲/Wert/▼; Klick auf ▲/▼ verstellt den Wert. */
+@Composable
+private fun EdgeStrip(
+    valueLabel: String,
+    onIncrement: () -> Unit,
+    onDecrement: () -> Unit,
+    modifier: Modifier
+) {
+    val interaction = remember { MutableInteractionSource() }
+    val hovered by interaction.collectIsHoveredAsState()
+    Box(modifier.hoverable(interaction)) {
+        if (hovered) {
+            Column(
+                Modifier.fillMaxHeight().width(44.dp).background(Color(0xAA0B0E14)),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Text("▲", color = Accent, fontSize = 20.sp,
+                    modifier = Modifier.clickable(onClick = onIncrement).padding(vertical = 10.dp))
+                Text(valueLabel, color = TextHi, fontSize = 12.sp)
+                Text("▼", color = Accent, fontSize = 20.sp,
+                    modifier = Modifier.clickable(onClick = onDecrement).padding(vertical = 10.dp))
+            }
+        }
+    }
+}
 
 // ---------- Live-Player ----------
 
@@ -26,6 +99,10 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     val canvas = remember { Canvas() }
     var inited by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
+    var volume by remember { mutableStateOf(100) }
+    var brightness by remember { mutableStateOf(1.0f) }
+
+    EscapeToBack(onBack)
 
     DisposableEffect(Unit) {
         onDispose { player.release() }
@@ -36,10 +113,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             factory = {
                 if (!inited) {
                     player.videoCanvas = canvas
-                    // vlcj verlangt, dass der Canvas "displayable" ist, bevor
-                    // die Video-Surface erzeugt wird. Im SwingPanel-factory ist
-                    // er das noch nicht (Fenster noch nicht sichtbar) → erst
-                    // beim HierarchyEvent initialisieren + abspielen.
+                    attachDoubleClickToBack(canvas, onBack)
                     if (canvas.isDisplayable) {
                         inited = true
                         if (player.init()) player.play(url, isVod = false)
@@ -65,13 +139,26 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
             Text(ch.name, color = TextHi, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
-            // Pause/Resume
             Text(if (paused) "▶" else "❚❚", color = TextHi, fontSize = 18.sp,
                 modifier = Modifier.clickable {
                     paused = !paused
                     if (paused) player.pause() else player.resume()
                 }.padding(horizontal = 10.dp))
         }
+
+        // Rand-Steuerung: links Helligkeit, rechts Lautstärke
+        EdgeStrip(
+            valueLabel = "🔆 ${(brightness * 100).toInt()}%",
+            onIncrement = { brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness) },
+            onDecrement = { brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness) },
+            modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
+        )
+        EdgeStrip(
+            valueLabel = "🔊 $volume%",
+            onIncrement = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
+            onDecrement = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) },
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+        )
     }
 }
 
@@ -86,13 +173,16 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
     var positionMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
     var watcher by remember { mutableStateOf<CreditsWatcher?>(null) }
+    var volume by remember { mutableStateOf(100) }
+    var brightness by remember { mutableStateOf(1.0f) }
     val scope = rememberCoroutineScope()
 
     val startPos = remember(vp.key) { ResumeStore.position(vp.key) }
 
+    EscapeToBack(onBack)
+
     DisposableEffect(Unit) {
         onDispose {
-            // Fortsetzen-Position sichern
             ResumeStore.save(vp.key, player.currentPositionMs(), player.durationMs())
             watcher?.stop()
             player.release()
@@ -113,8 +203,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             factory = {
                 if (!inited) {
                     player.videoCanvas = canvas
-                    // Start erst, wenn der Canvas displayable ist (siehe
-                    // LivePlayerScreen): vlcj braucht eine sichtbare Surface.
+                    attachDoubleClickToBack(canvas, onBack)
                     val doStart = {
                         if (!inited) {
                             inited = true
@@ -123,8 +212,6 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                                     vm.markWatched(vp.streamId)
                                     vp.next?.invoke()
                                 }
-                                // Auto-Advance: Abspann-Erkennung (nur bei Serien mit Folge)
-                                // Fallback: natürliches Ende des Streams.
                                 player.onVodEnded = { advance() }
                                 if (vp.next != null) {
                                     val w = CreditsWatcher(player) { advance() }
@@ -191,6 +278,20 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                 Text(fmt(durationMs), color = TextMid, fontSize = 11.sp)
             }
         }
+
+        // Rand-Steuerung: links Helligkeit, rechts Lautstärke
+        EdgeStrip(
+            valueLabel = "🔆 ${(brightness * 100).toInt()}%",
+            onIncrement = { brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness) },
+            onDecrement = { brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness) },
+            modifier = Modifier.align(Alignment.CenterStart).fillMaxHeight()
+        )
+        EdgeStrip(
+            valueLabel = "🔊 $volume%",
+            onIncrement = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
+            onDecrement = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) },
+            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+        )
     }
 }
 
