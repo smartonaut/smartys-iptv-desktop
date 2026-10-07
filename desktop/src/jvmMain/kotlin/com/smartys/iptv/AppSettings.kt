@@ -63,4 +63,11 @@ object AppSettings {
     }
 
     fun setRecordingsDir(path: String) = set("recordings_dir", path)
+
+    // ---------- Aufnahme-Daemon Autostart ----------
+
+    /** Aufnahme-Daemon beim Login automatisch starten? (Default: aus) */
+    fun daemonAutostartEnabled(): Boolean = get("daemon_autostart", "false").toBoolean()
+
+    fun setDaemonAutostartEnabled(enabled: Boolean) = set("daemon_autostart", enabled.toString())
 }

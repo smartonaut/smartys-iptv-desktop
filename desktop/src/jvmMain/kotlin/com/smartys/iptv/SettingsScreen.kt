@@ -136,6 +136,29 @@ fun SettingsScreen(vm: DesktopViewModel) {
             recDir = AppSettings.recordingsDir()
         }) { Text("Pfad speichern", color = Accent) }
 
+        Spacer(Modifier.height(16.dp))
+
+        // ---- Aufnahme-Daemon Autostart (optional) ----
+        Text("Aufnahme-Daemon", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        var daemonAuto by remember { mutableStateOf(AppSettings.daemonAutostartEnabled()) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = daemonAuto,
+                onCheckedChange = { on ->
+                    daemonAuto = on
+                    AppSettings.setDaemonAutostartEnabled(on)
+                    DaemonAutostart.setEnabled(on)
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Color(0x55FFC94D))
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Beim Anmelden automatisch starten — geplante Aufnahmen laufen auch ohne App",
+                color = TextMid, fontSize = 13.sp
+            )
+        }
+
         Spacer(Modifier.height(24.dp))
 
         // ---- Verwaltung zurücksetzen ----

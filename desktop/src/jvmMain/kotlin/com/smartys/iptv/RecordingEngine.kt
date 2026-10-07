@@ -24,12 +24,35 @@ class RecordingEngine {
 
     var onFinished: (() -> Unit)? = null
 
+    companion object {
+        private val LOCK = File(System.getProperty("user.home"), ".smartys-iptv/recording.lock")
+
+        /** true, wenn bereits ein anderer Prozess aufnimmt (Lock frisch, < 30s alt). */
+        fun isLocked(): Boolean {
+            if (!LOCK.exists()) return false
+            return System.currentTimeMillis() - LOCK.lastModified() < 30_000
+        }
+
+        /** Lock-Herzschlag erneuern (vom Scheduler-Loop alle paar Sekunden aufrufen). */
+        fun touchLock() {
+            runCatching { LOCK.writeText(System.currentTimeMillis().toString()) }
+        }
+
+        private fun clearLock() {
+            runCatching { LOCK.delete() }
+        }
+
+        fun clear() = clearLock()
+    }
+
     /**
      * Initialisiert libVLC (headless) und startet die Aufnahme.
      * Liefert true, wenn die Aufnahme gestartet wurde.
      */
     fun start(url: String, outputFile: File): Boolean {
         if (recording) return false
+        // Lock setzen (Herzschlag wird vom Scheduler-Loop erneuert)
+        touchLock()
         return runCatching {
             outputFile.parentFile?.mkdirs()
 
@@ -80,6 +103,7 @@ class RecordingEngine {
         player = null
         factory = null
         recording = false
+        RecordingEngine.clear()
     }
 
     fun release() {

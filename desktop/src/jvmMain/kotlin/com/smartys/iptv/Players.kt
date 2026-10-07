@@ -6,14 +6,19 @@ import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -25,7 +30,13 @@ import java.awt.KeyEventDispatcher
 import java.awt.event.KeyEvent
 import java.awt.event.MouseAdapter
 import java.awt.event.MouseEvent
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import javax.swing.SwingUtilities
+
+enum class AdhocRecMode { CURRENT_SHOW, ENDLESS }
 
 // ---------- Gemeinsame Player-Gesten ----------
 
@@ -93,6 +104,38 @@ private fun ArrowSeek(player: VlcPlayer) {
     }
 }
 
+/** R = Aufnahme-Dialog öffnen, S = laufende Aufnahme stoppen. */
+@Composable
+private fun RecordKeys(onStartRequest: () -> Unit, onStop: () -> Unit) {
+    val dispatcher = remember {
+        object : KeyEventDispatcher {
+            override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+                if (e.id == KeyEvent.KEY_PRESSED) {
+                    when (e.keyCode) {
+                        KeyEvent.VK_R -> { onStartRequest(); return true }
+                        KeyEvent.VK_S -> { onStop(); return true }
+                    }
+                }
+                return false
+            }
+        }
+    }
+    DisposableEffect(Unit) {
+        val mgr = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        mgr.addKeyEventDispatcher(dispatcher)
+        onDispose { mgr.removeKeyEventDispatcher(dispatcher) }
+    }
+}
+
+/** Startet eine Ad-hoc-Aufnahme des laufenden Kanals in eine dauerhafte Datei. */
+private fun startAdhocRecording(engine: RecordingEngine, vm: DesktopViewModel, ch: LiveStream, mode: AdhocRecMode) {
+    val url = vm.streamUrlFor(ch) ?: return
+    val dir = File(AppSettings.recordingsDir())
+    val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+    val fname = "${ch.name.replace(Regex("[^A-Za-z0-9._-]"), "_")}_$ts.ts"
+    engine.start(url, File(dir, fname))
+}
+
 /** Pfeil hoch/runter = Lautstärke +10/-10. */
 @Composable
 private fun VolumeArrows(onUp: () -> Unit, onDown: () -> Unit) {
@@ -156,6 +199,11 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     val timeshift = remember { AppSettings.timeshiftEnabled() }
     val timeshiftDir = remember { AppSettings.timeshiftDir() }
 
+    // ---- Ad-hoc-Aufnahme (R startet, S stoppt) ----
+    val recEngine = remember { RecordingEngine() }
+    var recMode by remember { mutableStateOf<AdhocRecMode?>(null) }  // null = keine Aufnahme
+    var showRecDialog by remember { mutableStateOf(false) }
+
     EscapeToBack(onBack)
 
     VolumeArrows(
@@ -163,8 +211,32 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         onDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
     )
 
+    // R = Aufnahme-Dialog, S = Aufnahme stoppen
+    RecordKeys(
+        onStartRequest = { showRecDialog = true },
+        onStop = {
+            recEngine.stop()
+            recMode = null
+        }
+    )
+
+    // Bei „laufende Sendung": automatisch am EPG-Ende stoppen
+    LaunchedEffect(recMode) {
+        if (recMode == AdhocRecMode.CURRENT_SHOW) {
+            val end = XmltvEpg.getNowAndNext(ch.epgChannelId).first?.stop
+            if (end != null && end > System.currentTimeMillis()) {
+                kotlinx.coroutines.delay(end - System.currentTimeMillis())
+                recEngine.stop()
+                recMode = null
+            }
+        }
+    }
+
     DisposableEffect(Unit) {
-        onDispose { player.release() }
+        onDispose {
+            recEngine.stop()
+            player.release()
+        }
     }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -206,6 +278,20 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 }.padding(horizontal = 10.dp))
         }
 
+        // Aufnahme-Indikator (erscheint während einer Ad-hoc-Aufnahme)
+        if (recMode != null) {
+            Row(
+                Modifier.align(Alignment.TopEnd).padding(top = 52.dp, end = 12.dp)
+                    .clip(RoundedCornerShape(6.dp)).background(Color(0xCC11172A)).padding(horizontal = 10.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("● REC", color = Danger, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.width(6.dp))
+                Text(if (recMode == AdhocRecMode.CURRENT_SHOW) "Sendung" else "endlos",
+                    color = TextHi, fontSize = 12.sp)
+            }
+        }
+
         // Rand-Steuerung: links Helligkeit, rechts Lautstärke
         EdgeStrip(
             valueLabel = "🔆 ${(brightness * 100).toInt()}%",
@@ -218,6 +304,33 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             onIncrement = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
             onDecrement = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) },
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+        )
+    }
+
+    // Aufnahme-Dialog (R gedrückt): laufende Sendung vs. endlos
+    if (showRecDialog) {
+        AlertDialog(
+            onDismissRequest = { showRecDialog = false },
+            containerColor = Card,
+            title = { Text("Aufnahme starten", color = TextHi) },
+            text = { Text("Wie soll aufgenommen werden?", color = TextMid) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showRecDialog = false
+                    startAdhocRecording(recEngine, vm, ch, AdhocRecMode.CURRENT_SHOW)
+                    recMode = AdhocRecMode.CURRENT_SHOW
+                }) { Text("Laufende Sendung", color = Accent) }
+            },
+            dismissButton = {
+                Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = {
+                        showRecDialog = false
+                        startAdhocRecording(recEngine, vm, ch, AdhocRecMode.ENDLESS)
+                        recMode = AdhocRecMode.ENDLESS
+                    }) { Text("Endlos (bis S)", color = TextHi) }
+                    TextButton(onClick = { showRecDialog = false }) { Text("Abbrechen", color = TextMid) }
+                }
+            }
         )
     }
 }

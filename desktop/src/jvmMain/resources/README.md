@@ -33,6 +33,18 @@ Start über das Anwendungsmenü („Smartys M3U Player") oder direkt:
 | Zurückspulen (−10 s) | `←` Pfeil links *(nur Filme/Serien)* |
 | Lautstärke erhöhen (+10) | `↑` Pfeil hoch |
 | Lautstärke verringern (−10) | `↓` Pfeil runter |
+| Aufnahme starten | `R` (fragt: laufende Sendung oder endlos) |
+| Aufnahme stoppen | `S` |
+
+### Aufnahme (Live-TV)
+
+- **`R`** startet sofort eine Aufnahme des laufenden Kanals. Es erscheint eine
+  Auswahl: **„Laufende Sendung"** (stoppt automatisch am EPG-Ende) oder
+  **„Endlos"** (läuft bis `S`).
+- **`S`** stoppt eine laufende Aufnahme.
+- Aufnahmen landen als `.ts` im Aufnahme-Verzeichnis (Einstellungen).
+- **Geplante Aufnahmen** (Timer) im Tab „Aufnahmen": aus dem EPG oder manuell
+  (Kanal + Startzeit + Dauer).
 
 ### Live-TV-Pause (Timeshift)
 
