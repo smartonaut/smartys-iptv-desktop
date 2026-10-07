@@ -6,6 +6,7 @@ import com.sun.jna.NativeLibrary
 import uk.co.caprica.vlcj.factory.MediaPlayerFactory
 import uk.co.caprica.vlcj.player.base.MediaPlayer
 import uk.co.caprica.vlcj.player.base.MediaPlayerEventAdapter
+import uk.co.caprica.vlcj.player.base.DeinterlaceMode
 import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
 import java.awt.Canvas
 import java.io.File
@@ -51,6 +52,27 @@ class VlcPlayer {
 
         /** Dateiname der Core-Bibliothek (transitive Abhängigkeit von libvlc). */
         private val coreFileName = if (isWindows) "libvlccore.dll" else "libvlccore.so.9"
+
+        /** Setzt eine Umgebungsvariable (plattformneutral). Öffentlich, damit die
+         *  RecordingEngine dieselbe libVLC-Init wiederverwenden kann. */
+        fun setEnv(name: String, value: String) {
+            runCatching {
+                if (isWindows) {
+                    com.sun.jna.platform.win32.Kernel32.INSTANCE.SetEnvironmentVariable(name, value)
+                } else {
+                    val libc = Native.load("c", LibC::class.java)
+                    libc.setenv(name, value, 1)
+                }
+            }
+        }
+
+        /** Plugins-Pfad (VLC_PLUGIN_PATH) — siehe ensureLibVlc. Öffentlich für die Engine. */
+        fun pluginDir(bundled: File): File =
+            if (isWindows) File(bundled, "plugins")
+            else File(bundled.parentFile, "plugins")
+
+        /** JNA-Libraryname (libvlc vs vlc). */
+        fun libName(): String = jnaLibName
 
         private val zipResource = if (isWindows)
             "/libvlc/libvlc-windows-x64.zip" else "/libvlc/libvlc-linux-x64.zip"
@@ -128,10 +150,15 @@ class VlcPlayer {
                 if (pluginDir.exists()) setenv("VLC_PLUGIN_PATH", pluginDir.absolutePath)
             }
 
-            val f = MediaPlayerFactory("--no-video-title-show", "--network-caching=1500")
+            val factoryArgs = mutableListOf("--no-video-title-show", "--network-caching=1500")
+            AppSettings.hwDecodingArg().takeIf { it.isNotBlank() }?.let { factoryArgs.add(it) }
+            val f = MediaPlayerFactory(factoryArgs)
             val mp = f.mediaPlayers().newEmbeddedMediaPlayer()
             val surface = f.videoSurfaces().newVideoSurface(videoCanvas)
             mp.videoSurface().set(surface)
+            // Deinterlacing: Live-TV ist interlaced — ohne das gibt es den
+            // "Kamm-Effekt" (verzerrte Kanten bei Bewegung).
+            mp.video().setDeinterlace(DeinterlaceMode.YADIF)
             mp.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
                 override fun finished(mediaPlayer: MediaPlayer) {
                     if (currentIsVod) {

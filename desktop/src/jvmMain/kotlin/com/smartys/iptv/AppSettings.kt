@@ -70,4 +70,23 @@ object AppSettings {
     fun daemonAutostartEnabled(): Boolean = get("daemon_autostart", "false").toBoolean()
 
     fun setDaemonAutostartEnabled(enabled: Boolean) = set("daemon_autostart", enabled.toString())
+
+    // ---------- Video-Decoding (HW vs SW) ----------
+
+    /** "auto" | "hw" | "sw" */
+    fun decodingMode(): String = get("decoding_mode", "auto")
+
+    fun setDecodingMode(mode: String) = set("decoding_mode", mode)
+
+    /**
+     * libVLC-Argument für den Decoding-Modus:
+     *  - auto: nichts (libVLC wählt selbst)
+     *  - hw:   Hardware-Decoding forcieren
+     *  - sw:   Software-Decoding forcieren (--avcodec-hw=none)
+     */
+    fun hwDecodingArg(): String = when (decodingMode()) {
+        "hw" -> "--avcodec-hw=any"
+        "sw" -> "--avcodec-hw=none"
+        else -> ""
+    }
 }

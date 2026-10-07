@@ -138,6 +138,32 @@ fun SettingsScreen(vm: DesktopViewModel) {
 
         Spacer(Modifier.height(16.dp))
 
+        // ---- Video-Decoding (HW/SW) ----
+        Text("Video-Decoding", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        var decMode by remember { mutableStateOf(AppSettings.decodingMode()) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("auto" to "Auto", "hw" to "Hardware (GPU)", "sw" to "Software (CPU)").forEach { (m, label) ->
+                val active = decMode == m
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (active) Accent else Card,
+                    modifier = Modifier.clickable {
+                        decMode = m
+                        AppSettings.setDecodingMode(m)
+                    }
+                ) {
+                    Text(label, color = if (active) AccentDark else TextMid, fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(4.dp))
+        Text("Bei verzerrtem/unsauberem Bild zuerst Auto, sonst Software (CPU) versuchen.",
+            color = TextMid, fontSize = 12.sp)
+
+        Spacer(Modifier.height(16.dp))
+
         // ---- Aufnahme-Daemon Autostart (optional) ----
         Text("Aufnahme-Daemon", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))

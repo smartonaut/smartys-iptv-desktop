@@ -104,6 +104,7 @@ private fun RecordingRow(r: RecordingStore.Recording, onDelete: () -> Unit) {
 @Composable
 private fun EpgRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDismiss: () -> Unit, onSaved: () -> Unit) {
     var selectedChannel by remember { mutableStateOf<LiveStream?>(null) }
+    var pendingProgramme by remember { mutableStateOf<XmltvProgramme?>(null) }
     val programmes = remember(selectedChannel) {
         selectedChannel?.let { XmltvEpg.programmesFor(it.epgChannelId).orEmpty().ifEmpty { XmltvEpg.programmesForName(it.name) } }
             ?: emptyList()
@@ -128,22 +129,25 @@ private fun EpgRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDismi
                     if (programmes.isEmpty()) {
                         Text("Keine EPG-Daten für diesen Kanal.", color = TextMid, fontSize = 13.sp)
                     } else {
-                        LazyColumn {
-                            items(programmes) { p ->
-                                val now = System.currentTimeMillis()
-                                val past = p.stop < now
-                                Column(Modifier.fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (past) Card else Color(0x22FFC94D))
-                                    .clickable(enabled = !past) {
-                                        scheduleEpgRecording(vm, selectedChannel!!, p)
-                                        onSaved()
+                        // Nur laufende + zukünftige Sendungen anzeigen (vergangene sind nicht aufnehmbar)
+                        val upcoming = programmes.filter { it.stop > System.currentTimeMillis() }
+                        if (upcoming.isEmpty()) {
+                            Text("Keine laufenden/zukünftigen Sendungen.", color = TextMid, fontSize = 13.sp)
+                        } else {
+                            LazyColumn {
+                                items(upcoming) { p ->
+                                    Column(Modifier.fillMaxWidth()
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0x22FFC94D))
+                                        .clickable {
+                                            pendingProgramme = p
+                                        }
+                                        .padding(10.dp)) {
+                                        Text("${XmltvEpg.hhmm(p.start)} – ${XmltvEpg.hhmm(p.stop)}", color = Accent, fontSize = 12.sp)
+                                        Text(p.title, color = TextHi, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                     }
-                                    .padding(10.dp)) {
-                                    Text("${XmltvEpg.hhmm(p.start)} – ${XmltvEpg.hhmm(p.stop)}", color = if (past) TextMid else Accent, fontSize = 12.sp)
-                                    Text(p.title, color = if (past) TextMid else TextHi, fontSize = 14.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                    Spacer(Modifier.height(6.dp))
                                 }
-                                Spacer(Modifier.height(6.dp))
                             }
                         }
                     }
@@ -153,6 +157,31 @@ private fun EpgRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDismi
         confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen", color = TextMid) } },
         dismissButton = { if (selectedChannel != null) TextButton(onClick = { selectedChannel = null }) { Text("Zurück", color = Accent) } }
     )
+
+    // Bestätigungsfrage vor dem Aufnehmen
+    pendingProgramme?.let { p ->
+        AlertDialog(
+            onDismissRequest = { pendingProgramme = null },
+            containerColor = Card,
+            title = { Text("Diese Sendung aufnehmen?", color = TextHi) },
+            text = {
+                Column {
+                    Text(p.title, color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.height(4.dp))
+                    Text("${XmltvEpg.hhmm(p.start)} – ${XmltvEpg.hhmm(p.stop)} · ${selectedChannel?.name ?: ""}",
+                        color = TextMid, fontSize = 13.sp)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    selectedChannel?.let { scheduleEpgRecording(vm, it, p) }
+                    pendingProgramme = null
+                    onSaved()
+                }) { Text("Aufnehmen", color = Accent) }
+            },
+            dismissButton = { TextButton(onClick = { pendingProgramme = null }) { Text("Abbrechen", color = TextMid) } }
+        )
+    }
 }
 
 /** Legt eine EPG-Aufnahme im Store an (Stream-URL wird sofort aufgelöst + gespeichert). */

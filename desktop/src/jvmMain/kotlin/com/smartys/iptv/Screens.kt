@@ -282,7 +282,7 @@ fun PinDialog(
 // ---------- Filme (VOD) ----------
 
 @Composable
-fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onPlayMovie: (VodStream) -> Unit) {
+fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onOpenMovie: (VodStream) -> Unit) {
     LaunchedEffect(Unit) { if (vm.vodMovies.isEmpty()) vm.loadVod() }
 
     var selectedCat by remember { mutableStateOf<String?>(null) }
@@ -328,7 +328,7 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onP
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(applied, key = { it.streamId }) { m ->
-                        Column(Modifier.fillMaxWidth().clickable { onPlayMovie(m) }) {
+                        Column(Modifier.fillMaxWidth().clickable { onOpenMovie(m) }) {
                             Poster(m.poster(), m.name, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
                             Spacer(Modifier.height(8.dp))
                             Text(m.name, color = TextHi, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
@@ -341,6 +341,126 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onP
             }
         }
     }
+}
+
+// ---------- Film-Detail (Beschreibung + Resume/von-vorne + Trailer) ----------
+
+@Composable
+fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, onPlay: (Long?) -> Unit) {
+    var meta by remember { mutableStateOf<TmdbMeta.MovieMeta?>(null) }
+    var metaLoading by remember { mutableStateOf(m.tmdb != null) }
+
+    LaunchedEffect(m.tmdb) {
+        if (m.tmdb != null) {
+            vm.fetchTmdb(m.tmdb) { result ->
+                meta = result
+                metaLoading = false
+            }
+        }
+    }
+
+    // Resume-Position (für den "Fortsetzen"-Button)
+    val resumePos = remember(m.streamId) { ResumeStore.position("vod:movie:${m.streamId}") }
+
+    Column(Modifier.fillMaxSize().background(Bg).padding(24.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
+            Text(m.name, color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Spacer(Modifier.height(20.dp))
+
+        Row(Modifier.fillMaxWidth()) {
+            // Poster links
+            Poster(m.poster(), m.name, Modifier.width(200.dp).aspectRatio(2f / 3f))
+
+            Spacer(Modifier.width(24.dp))
+
+            // Infos + Buttons rechts
+            Column(Modifier.weight(1f)) {
+                // Meta-Zeile
+                if (m.rating != null || m.tmdb != null || m.categoryName.isNotBlank()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        m.rating?.let { Text("★ $it", color = Accent, fontSize = 14.sp) }
+                        m.categoryName.takeIf { it.isNotBlank() }?.let { Text(it, color = TextMid, fontSize = 13.sp) }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                // Beschreibung (TMDB overview oder Fallback)
+                if (metaLoading) {
+                    Text("Beschreibung lädt…", color = TextMid, fontSize = 13.sp)
+                } else {
+                    val desc = meta?.overview
+                    if (desc != null) {
+                        Text(desc, color = TextHi, fontSize = 14.sp, lineHeight = 20.sp)
+                    } else {
+                        Text("Keine Beschreibung verfügbar.", color = TextMid, fontSize = 13.sp)
+                    }
+                    meta?.let { mm ->
+                        if (mm.genres.isNotEmpty() || mm.runtime != null) {
+                            Spacer(Modifier.height(8.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                mm.genres.joinToString(" · ").takeIf { it.isNotBlank() }?.let {
+                                    Text(it, color = TextMid, fontSize = 12.sp)
+                                }
+                                mm.runtime?.let { Text("${it} min", color = TextMid, fontSize = 12.sp) }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(24.dp))
+
+                // Play-Buttons
+                val url = vm.creds?.movieUrl(m.streamId, m.containerExtension ?: "mp4")
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    // Fortsetzen (nur wenn Resume-Position > 0)
+                    if (resumePos > 0) {
+                        Button(
+                            onClick = { onPlay(null) },  // null = auto-resume
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)
+                        ) {
+                            Text("▶ Fortsetzen (${fmtPos(resumePos)})", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    // Von vorne
+                    Button(
+                        onClick = { onPlay(0L) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (resumePos > 0) Card else Accent,
+                            contentColor = if (resumePos > 0) TextHi else AccentDark
+                        )
+                    ) {
+                        Text("Von vorne abspielen", fontWeight = FontWeight.Bold)
+                    }
+                    // Trailer (wenn vorhanden)
+                    if (m.hasTrailer()) {
+                        OutlinedButton(onClick = {
+                            // YouTube-Trailer im Browser öffnen
+                            val vid = m.trailer
+                            if (!vid.isNullOrBlank()) {
+                                runCatching {
+                                    java.awt.Desktop.getDesktop().browse(
+                                        java.net.URI("https://www.youtube.com/watch?v=$vid")
+                                    )
+                                }
+                            }
+                        }) {
+                            Text("▶ Trailer ansehen", color = TextHi)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun fmtPos(ms: Long): String {
+    val s = ms / 1000
+    val h = s / 3600
+    val m = (s % 3600) / 60
+    return if (h > 0) String.format("%d:%02d:%02d", h, m, s % 60)
+    else String.format("%d:%02d", m, s % 60)
 }
 
 // ---------- Serien ----------

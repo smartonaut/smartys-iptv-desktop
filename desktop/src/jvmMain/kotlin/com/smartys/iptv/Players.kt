@@ -64,12 +64,27 @@ private fun EscapeToBack(onBack: () -> Unit) {
     }
 }
 
-/** Doppelklick auf dem Video-Canvas → onBack. */
-private fun attachDoubleClickToBack(canvas: Canvas, onBack: () -> Unit) {
+/** Globaler Vollbild-Toggle (Doppelklick). Nutzt das AWT GraphicsDevice-Fullscreen. */
+object FullscreenController {
+    @Volatile
+    var window: java.awt.Window? = null
+
+    fun toggle() {
+        val w = window ?: return
+        SwingUtilities.invokeLater {
+            val gd = w.graphicsConfiguration?.device ?: return@invokeLater
+            if (gd.fullScreenWindow == null) gd.fullScreenWindow = w
+            else gd.fullScreenWindow = null
+        }
+    }
+}
+
+/** Doppelklick auf dem Video-Canvas → Vollbild umschalten. */
+private fun attachDoubleClickToggleFullscreen(canvas: Canvas) {
     canvas.addMouseListener(object : MouseAdapter() {
         override fun mouseClicked(e: MouseEvent) {
             if (e.clickCount >= 2) {
-                SwingUtilities.invokeLater { onBack() }
+                SwingUtilities.invokeLater { FullscreenController.toggle() }
             }
         }
     })
@@ -191,7 +206,7 @@ private fun EdgeStrip(
 @Composable
 fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: () -> Unit) {
     val player = remember { VlcPlayer() }
-    val canvas = remember { Canvas() }
+    val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var volume by remember { mutableStateOf(100) }
@@ -244,7 +259,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             factory = {
                 if (!inited) {
                     player.videoCanvas = canvas
-                    attachDoubleClickToBack(canvas, onBack)
+                    attachDoubleClickToggleFullscreen(canvas)
                     val start = { if (player.init()) player.play(url, isVod = false, timeshift = timeshift, timeshiftDir = timeshiftDir) }
                     if (canvas.isDisplayable) {
                         inited = true
@@ -350,7 +365,10 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
     var brightness by remember { mutableStateOf(1.0f) }
     val scope = rememberCoroutineScope()
 
-    val startPos = remember(vp.key) { ResumeStore.position(vp.key) }
+    // Startposition: forceStartPos (0 = von vorne) hat Vorrang vor Auto-Resume
+    val startPos = remember(vp.key, vp.forceStartPos) {
+        vp.forceStartPos ?: ResumeStore.position(vp.key)
+    }
 
     EscapeToBack(onBack)
 
@@ -383,7 +401,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             factory = {
                 if (!inited) {
                     player.videoCanvas = canvas
-                    attachDoubleClickToBack(canvas, onBack)
+                    attachDoubleClickToggleFullscreen(canvas)
                     val doStart = {
                         if (!inited) {
                             inited = true

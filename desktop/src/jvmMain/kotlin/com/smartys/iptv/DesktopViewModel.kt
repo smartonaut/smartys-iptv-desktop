@@ -217,6 +217,14 @@ class DesktopViewModel {
         withTimeout(15000) { a.seriesInfo(c.user, c.pass, seriesId = seriesId) }
     }.getOrNull()
 
+    /** TMDB-Metadaten (Beschreibung, Genres, Laufzeit) für einen Film. */
+    fun fetchTmdb(tmdbId: String?, onResult: (TmdbMeta.MovieMeta?) -> Unit) {
+        val id = tmdbId ?: return
+        scope.launch(Dispatchers.IO) {
+            onResult(TmdbMeta.fetchMovie(id))
+        }
+    }
+
     fun streamUrlFor(channel: LiveStream): String? {
         val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
         return c.streamUrl(channel.streamId)

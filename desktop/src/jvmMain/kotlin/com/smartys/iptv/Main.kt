@@ -43,7 +43,8 @@ data class VodPlaying(
     val streamId: String, // für Zuletzt-gesehen
     val poster: String?,
     val isEpisode: Boolean = false,
-    val next: (() -> Unit)? = null  // Auto-Advance zur nächsten Episode
+    val next: (() -> Unit)? = null,  // Auto-Advance zur nächsten Episode
+    val forceStartPos: Long? = null  // null = auto-resume, 0L = von vorne, >0 = feste Position
 )
 
 @Composable
@@ -55,6 +56,7 @@ fun App() {
     var liveChannel by remember { mutableStateOf<LiveStream?>(null) }
     var vodPlaying by remember { mutableStateOf<VodPlaying?>(null) }
     var showSeries by remember { mutableStateOf<SeriesStream?>(null) }
+    var selectedMovie by remember { mutableStateOf<VodStream?>(null) }
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Accent, background = Bg, surface = Card,
@@ -80,12 +82,7 @@ fun App() {
                                 Tab.LIVE -> LiveTvScreen(vm, s, onPlay = { liveChannel = it })
                                 Tab.MOVIES -> MoviesScreen(vm,
                                     onOpenSeries = { showSeries = it },
-                                    onPlayMovie = { m ->
-                                        val c = vm.creds
-                                        val url = c?.movieUrl(m.streamId, m.containerExtension ?: "mp4") ?: return@MoviesScreen
-                                        val key = "vod:movie:${m.streamId}"
-                                        vodPlaying = VodPlaying(m.name, url, key, m.streamId, m.poster(), false, null)
-                                    })
+                                    onOpenMovie = { selectedMovie = it })
                                 Tab.SERIES -> SeriesScreen(vm, onOpen = { showSeries = it })
                                 Tab.DOWNLOADS -> DownloadsScreen(vm,
                                     onPlay = { file, title, id ->
@@ -95,6 +92,20 @@ fun App() {
                                 Tab.SETTINGS -> SettingsScreen(vm)
                             }
                         }
+                    }
+
+                    // Film-Detail (Overlay): Beschreibung + Resume/von-vorne + Trailer
+                    selectedMovie?.let { m ->
+                        MovieDetailScreen(vm, m,
+                            onBack = { selectedMovie = null },
+                            onPlay = { forceStartPos ->
+                                val c = vm.creds
+                                if (c != null) {
+                                    val url = c.movieUrl(m.streamId, m.containerExtension ?: "mp4")
+                                    val key = "vod:movie:${m.streamId}"
+                                    vodPlaying = VodPlaying(m.name, url, key, m.streamId, m.poster(), false, null, forceStartPos)
+                                }
+                            })
                     }
 
                     // Serien-Detail (Overlay)
@@ -268,6 +279,7 @@ fun main(args: Array<String>) {
         extractReadme()
         val icon = loadWindowIcon()
         Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV", icon = icon) {
+            FullscreenController.window = this.window
             App()
         }
     }
