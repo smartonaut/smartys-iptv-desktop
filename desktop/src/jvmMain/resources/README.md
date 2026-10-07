@@ -27,14 +27,20 @@ Start über das Anwendungsmenü („Smartys M3U Player") oder direkt:
 
 | Aktion | Geste / Taste |
 |--------|---------------|
-| Zurück ins Menü / Senderliste | `ESC` **oder** Doppelklick aufs Video |
+| Vollbild an/aus | **Doppelklick** aufs Video |
+| Zurück ins Menü / Senderliste | `ESC` |
 | Pause / Play | ❚❚ / ▶ in der Kopfleiste |
 | Vorspulen (+10 s) | `→` Pfeil rechts *(nur Filme/Serien)* |
 | Zurückspulen (−10 s) | `←` Pfeil links *(nur Filme/Serien)* |
 | Lautstärke erhöhen (+10) | `↑` Pfeil hoch |
 | Lautstärke verringern (−10) | `↓` Pfeil runter |
+| Helligkeit erhöhen | `→` Pfeil rechts *(nur Live-TV)* |
+| Helligkeit verringern | `←` Pfeil links *(nur Live-TV)* |
 | Aufnahme starten | `R` (fragt: laufende Sendung oder endlos) |
 | Aufnahme stoppen | `S` |
+
+Hinweis: Lautstärke, Helligkeit und der Kanalname + laufende Sendung werden
+direkt **ins Videobild** eingeblendet (OSD), nicht als eigenes Overlay-Fenster.
 
 ### Aufnahme (Live-TV)
 
@@ -58,10 +64,9 @@ Pause + Zurückspulen am laufenden Kanal sind dann möglich.
 
 ### Rand-Steuerung (Maus an den Bildschirmrand)
 
-| Aktion | Position |
-|--------|----------|
-| Lautstärke ▲/▼ | Rechter Bildschirmrand (Hover) |
-| Helligkeit ▲/▼ | Linker Bildschirmrand (Hover) |
+Die Rand-Steuerung wurde durch **Tastatur-Steuerung** ersetzt (siehe Tabelle oben),
+weil Overlays hinter dem eingebetteten Video-Canvas nicht sichtbar waren. Lautstärke
+und Helligkeit werden jetzt direkt ins Videobild (OSD) eingeblendet.
 
 ## Versionslog
 
@@ -69,6 +74,15 @@ Pause + Zurückspulen am laufenden Kanal sind dann möglich.
 - **Geplante Aufnahmen (Timer):** Sendungen aus dem EPG aufnehmen oder manuell
   (Kanal + Startzeit + Dauer) planen. Aufnahmen starten auch bei geschlossener
   App (Hintergrund-Daemon). Aufnahmeverzeichnis in den Einstellungen wählbar.
+- **Film-Detailseite:** Klick auf ein Film-Cover öffnet Beschreibung (TMDB),
+  Rating/Kategorie, „Fortsetzen\"/„Von vorne abspielen\" und Trailer (YouTube).
+- **Doppelklick = Vollbild**, zurück ins Menü nur noch per `ESC`.
+- **OSD ins Videobild:** Kanalname + laufende Sendung, Lautstärke, Helligkeit und
+  `● REC`-Status erscheinen direkt im Bild (libVLC-Marquee).
+- **Lautstärke** `↑`/`↓`, **Helligkeit** `←`/`→` (im Live-TV), jeweils mit OSD-Anzeige.
+- **Video-Decoding wählbar** (Einstellungen): Auto / Hardware (GPU) / Software (CPU).
+  Software-Decoding (Default) behebt grüne Blöcke + Mosaik auf neuer Intel-Hardware
+  (Arrow Lake) — deaktiviert VAAPI/VDPAU.
 
 ### 1.4.7
 - **Live-TV-Pause (Timeshift):** Stream wird auf Wunsch auf die Platte gepuffert,
