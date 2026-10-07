@@ -73,8 +73,9 @@ object AppSettings {
 
     // ---------- Video-Decoding (HW vs SW) ----------
 
-    /** "auto" | "hw" | "sw" */
-    fun decodingMode(): String = get("decoding_mode", "auto")
+    /** "auto" | "hw" | "sw" — Default "sw" (Software), weil Hybrid-GPU-Laptops (Intel+NVIDIA)
+     *  bei libVLC-Hardware-Decoding grüne Farbstreifen/Makroblöcke produzieren. */
+    fun decodingMode(): String = get("decoding_mode", "sw")
 
     fun setDecodingMode(mode: String) = set("decoding_mode", mode)
 
