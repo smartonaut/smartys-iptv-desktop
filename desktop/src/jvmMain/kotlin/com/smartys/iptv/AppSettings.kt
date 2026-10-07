@@ -80,14 +80,17 @@ object AppSettings {
     fun setDecodingMode(mode: String) = set("decoding_mode", mode)
 
     /**
-     * libVLC-Argument für den Decoding-Modus:
+     * libVLC-Argumente für den Decoding-Modus:
      *  - auto: nichts (libVLC wählt selbst)
      *  - hw:   Hardware-Decoding forcieren
-     *  - sw:   Software-Decoding forcieren (--avcodec-hw=none)
+     *  - sw:   Software-Decoding erzwingen. Ein einzelnes --avcodec-hw=none reicht
+     *          NICHT, weil das gebündelte libVLC eigene VAAPI/VDPAU-Decoder hat
+     *          (die bei zu neuer Hardware wie Intel Arrow Lake grüne Blöcke/Mosaik
+     *          produzieren). Deshalb zusätzlich VDPAU/VAAPI-Ausgabe deaktivieren.
      */
-    fun hwDecodingArg(): String = when (decodingMode()) {
-        "hw" -> "--avcodec-hw=any"
-        "sw" -> "--avcodec-hw=none"
-        else -> ""
+    fun hwDecodingArgs(): List<String> = when (decodingMode()) {
+        "hw" -> listOf("--avcodec-hw=any")
+        "sw" -> listOf("--avcodec-hw=none", "--no-vdpau", "--no-vaapi")
+        else -> emptyList()
     }
 }

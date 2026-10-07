@@ -236,7 +236,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
 
     EscapeToBack(onBack)
 
-    // Live-TV-Tasten: ↑/↓ = Lautstärke, ←/→ = Helligkeit (im Live-TV kein Seek).
+    // Live-TV-Tasten: ↑/↓ = Lautstärke, ←/→ = Helligkeit, R = Aufnahme-Dialog, S = Stopp.
     // Feedback läuft über libVLC-Marquee (ins Videobild), da Compose-Overlays
     // hinter dem heavyweight Video-Canvas unsichtbar bleiben.
     val liveTvDispatcher = remember {
@@ -264,6 +264,8 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                         player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500)
                         return true
                     }
+                    KeyEvent.VK_R -> { showRecDialog = true; return true }
+                    KeyEvent.VK_S -> { recEngine.stop(); recMode = null; return true }
                 }
                 return false
             }
@@ -274,11 +276,6 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         mgr.addKeyEventDispatcher(liveTvDispatcher)
         onDispose { mgr.removeKeyEventDispatcher(liveTvDispatcher) }
     }
-
-    RecordKeys(
-        onStartRequest = { showRecDialog = true },
-        onStop = { recEngine.stop(); recMode = null }
-    )
 
     // OSD beim Kanalstart: sobald der Player initialisiert ist (inited), Kanalname
     // + laufende Sendung via Marquee einblenden.

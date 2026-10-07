@@ -152,7 +152,7 @@ class VlcPlayer {
             }
 
             val factoryArgs = mutableListOf("--no-video-title-show", "--network-caching=1500")
-            AppSettings.hwDecodingArg().takeIf { it.isNotBlank() }?.let { factoryArgs.add(it) }
+            factoryArgs.addAll(AppSettings.hwDecodingArgs())
             val f = MediaPlayerFactory(factoryArgs)
             val mp = f.mediaPlayers().newEmbeddedMediaPlayer()
             val surface = f.videoSurfaces().newVideoSurface(videoCanvas)
@@ -160,6 +160,8 @@ class VlcPlayer {
             // Deinterlacing: Live-TV ist interlaced — ohne das gibt es den
             // "Kamm-Effekt" (verzerrte Kanten bei Bewegung).
             mp.video().setDeinterlace(DeinterlaceMode.YADIF)
+            // Video-Adjust aktivieren, sonst wirken setBrightness/setContrast nicht.
+            mp.video().setAdjustVideo(true)
             mp.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
                 override fun finished(mediaPlayer: MediaPlayer) {
                     if (currentIsVod) {
