@@ -75,42 +75,22 @@ object AppSettings {
 
     /**
      * Gewünschter Modus: "auto" (Standard, empfohlen) | "hw" | "sw".
-     * Bei "auto" erkennt der Player selbst, ob Hardware-Decoding auf diesem
-     * System sauber läuft, und wählt dementsprechend.
+     * Bei "auto" lässt der Player libVLC selbst den besten Decoder/Pfad wählen —
+     * identisch zum Verhalten der eigenständigen VLC-App.
      */
     fun decodingMode(): String = get("decoding_mode", "auto")
 
     fun setDecodingMode(mode: String) = set("decoding_mode", mode)
 
-    /** Hybrid-GPU erkennen: mehr als ein GPU-Vendor (z. B. Intel-iGPU + NVIDIA-dGPU).
-     *  Genau diese Systeme liefern mit libVLVs VAAPI/VDPAU-Hardware-Decoding
-     *  grüne Blöcke bei H.264 — dort bevorzugen wir Software-Decoding. */
-    private fun isHybridGpu(): Boolean {
-        val vendors = mutableSetOf<String>()
-        val drm = File("/sys/class/drm")
-        if (!drm.exists()) return false
-        drm.listFiles()?.forEach { card ->
-            val v = File(card, "device/vendor")
-            if (v.exists()) runCatching { vendors.add(v.readText().trim()) }
-        }
-        return vendors.size > 1
-    }
-
     /**
      * Effektive libVLC-Argumente für den Decoding-Modus:
+     *  - auto: keine (libVLC auto-detekt, wie die VLC-App)
      *  - hw:   Hardware-Decoding forcieren
-     *  - sw:   Software-Decoding erzwingen (--avcodec-hw=none + --codec avcodec)
-     *  - auto: Hybrid-GPU → Software (vermeidet grüne Blöcke); sonst Hardware
-     *          zulassen (libVLC wählt den besten verfügbaren Decoder).
-     *
-     *  Zusätzlich --glconv=none: auf Hybrid-Systemen (Intel+NVIDIA) läuft sonst
-     *  die Video-AUSGABE über die VAAPI/VDPAU-GL-Konvertierung, was auch bei
-     *  sauberem Software-Decoding grüne Blöcke am unteren Bildrand erzeugt.
+     *  - sw:   Software-Decoding erzwingen (nur Decoder, kein Ausgabe-Eingriff)
      */
     fun hwDecodingArgs(): List<String> = when (decodingMode()) {
         "hw" -> listOf("--avcodec-hw=any")
-        "sw" -> listOf("--avcodec-hw=none", "--codec", "avcodec", "--glconv=none")
-        else -> if (isHybridGpu()) listOf("--avcodec-hw=none", "--codec", "avcodec", "--glconv=none")
-                else emptyList()
+        "sw" -> listOf("--avcodec-hw=none", "--codec", "avcodec")
+        else -> emptyList()
     }
 }
