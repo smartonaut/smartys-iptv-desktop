@@ -80,15 +80,46 @@ object FullscreenController {
     }
 }
 
-/** Doppelklick auf dem Video-Canvas → Vollbild umschalten. */
-private fun attachDoubleClickToggleFullscreen(canvas: Canvas) {
+/**
+ * Maus-Steuerung am Video-Canvas:
+ *  - Einzelklick (links) → zurück ins Menü
+ *  - Doppelklick (links) → Vollbild an/aus
+ *  - Mausrad hoch/runter → Lautstärke +/−
+ *
+ * Einzel-/Doppelklick werden über einen kurzen Timer unterschieden: erst wenn
+ * binnen ~250 ms kein zweiter Klick folgt, gilt der erste als Einzelklick.
+ */
+private fun attachMouseControls(
+    canvas: Canvas,
+    onBack: () -> Unit,
+    onVolumeUp: () -> Unit,
+    onVolumeDown: () -> Unit
+) {
+    var clickTimer: javax.swing.Timer? = null
     canvas.addMouseListener(object : MouseAdapter() {
         override fun mouseClicked(e: MouseEvent) {
+            if (e.button != MouseEvent.BUTTON1) return
             if (e.clickCount >= 2) {
+                clickTimer?.stop()
                 SwingUtilities.invokeLater { FullscreenController.toggle() }
+            } else {
+                // Einzelklick erst nach kurzer Verzögerung auslösen, um
+                // Doppelklick nicht fälschlich als "zurück" zu werten.
+                clickTimer?.stop()
+                clickTimer = javax.swing.Timer(250) {
+                    SwingUtilities.invokeLater(onBack)
+                }.apply {
+                    isRepeats = false
+                    start()
+                }
             }
         }
     })
+    canvas.addMouseWheelListener { e ->
+        val clicks = e.wheelRotation
+        if (clicks < 0) repeat(-clicks) { SwingUtilities.invokeLater(onVolumeUp) }
+        else if (clicks > 0) repeat(clicks) { SwingUtilities.invokeLater(onVolumeDown) }
+    }
 }
 
 /** Pfeiltasten bei VOD: Links = -10s, Rechts = +10s (an die Länge geklemmt). */
@@ -312,7 +343,12 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             factory = {
                 if (!inited) {
                     player.videoCanvas = canvas
-                    attachDoubleClickToggleFullscreen(canvas)
+                    attachMouseControls(
+                        canvas,
+                        onBack = onBack,
+                        onVolumeUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) },
+                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) }
+                    )
                     val start = { if (player.init()) player.play(url, isVod = false, timeshift = timeshift, timeshiftDir = timeshiftDir) }
                     if (canvas.isDisplayable) {
                         inited = true
@@ -438,7 +474,12 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             factory = {
                 if (!inited) {
                     player.videoCanvas = canvas
-                    attachDoubleClickToggleFullscreen(canvas)
+                    attachMouseControls(
+                        canvas,
+                        onBack = onBack,
+                        onVolumeUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
+                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
+                    )
                     val doStart = {
                         if (!inited) {
                             inited = true
