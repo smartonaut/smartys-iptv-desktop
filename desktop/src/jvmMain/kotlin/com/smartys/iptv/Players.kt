@@ -70,17 +70,19 @@ object FullscreenController {
     @Volatile
     var window: java.awt.Window? = null
 
-    /** Wird aufgerufen, wenn sich der Vollbild-Zustand ändert (für Compose-UI). */
-    @Volatile
-    var onFullscreenChanged: ((Boolean) -> Unit)? = null
+    private var controlsWindow: javax.swing.JWindow? = null
 
     fun toggle() {
         val w = window ?: return
         SwingUtilities.invokeLater {
             val gd = w.graphicsConfiguration?.device ?: return@invokeLater
-            if (gd.fullScreenWindow == null) gd.fullScreenWindow = w
-            else gd.fullScreenWindow = null
-            onFullscreenChanged?.invoke(isFullscreen())
+            if (gd.fullScreenWindow == null) {
+                gd.fullScreenWindow = w
+                showControls(gd)
+            } else {
+                gd.fullScreenWindow = null
+                hideControls()
+            }
         }
     }
 
@@ -95,8 +97,8 @@ object FullscreenController {
         SwingUtilities.invokeLater {
             val gd = w.graphicsConfiguration?.device
             if (gd?.fullScreenWindow != null) gd.fullScreenWindow = null
+            hideControls()
             if (w is java.awt.Frame) (w as java.awt.Frame).state = java.awt.Frame.ICONIFIED
-            onFullscreenChanged?.invoke(false)
         }
     }
 
@@ -105,9 +107,52 @@ object FullscreenController {
         SwingUtilities.invokeLater {
             val gd = w.graphicsConfiguration?.device
             if (gd?.fullScreenWindow != null) gd.fullScreenWindow = null
+            hideControls()
             w.dispose()
             System.exit(0)
         }
+    }
+
+    /**
+     * Fenstersteuerung (Minimieren + Schließen) als eigenes, immer-oben JWindow.
+     * Ein Compose-Overlay würde vom heavyweight Video-Canvas verdeckt — ein
+     * separates heavyweight AWT-Fenster liegt dagegen garantiert darüber.
+     */
+    private fun showControls(gd: java.awt.GraphicsDevice) {
+        hideControls()
+        val jw = javax.swing.JWindow()
+        jw.isAlwaysOnTop = true
+        val panel = javax.swing.JPanel(java.awt.FlowLayout(java.awt.FlowLayout.RIGHT, 4, 4))
+        panel.background = java.awt.Color(0x11, 0x17, 0x2A, 0xCC)
+
+        val min = javax.swing.JButton("—")
+        min.isFocusable = false
+        min.isBorderPainted = false
+        min.foreground = java.awt.Color(0xE8, 0xEE, 0xFC)
+        min.background = java.awt.Color(0x11, 0x17, 0x2A)
+        min.addActionListener { minimize() }
+
+        val close = javax.swing.JButton("✕")
+        close.isFocusable = false
+        close.isBorderPainted = false
+        close.foreground = java.awt.Color(0xFF, 0x6B, 0x6B)
+        close.background = java.awt.Color(0x11, 0x17, 0x2A)
+        close.addActionListener { close() }
+
+        panel.add(min)
+        panel.add(close)
+        jw.contentPane.add(panel)
+        jw.pack()
+
+        val bounds = gd.defaultConfiguration.bounds
+        jw.setLocation(bounds.x + bounds.width - jw.width - 12, bounds.y + 12)
+        jw.isVisible = true
+        controlsWindow = jw
+    }
+
+    private fun hideControls() {
+        controlsWindow?.dispose()
+        controlsWindow = null
     }
 }
 

@@ -58,14 +58,6 @@ fun App() {
     var vodPlaying by remember { mutableStateOf<VodPlaying?>(null) }
     var showSeries by remember { mutableStateOf<SeriesStream?>(null) }
     var selectedMovie by remember { mutableStateOf<VodStream?>(null) }
-    var isFullscreen by remember { mutableStateOf(false) }
-
-    // Vollbild-Zustand aus dem Controller spiegeln, damit die Fenstersteuerung
-    // (X / Minimieren) oben rechts erscheint, wenn die OS-Titelleiste fehlt.
-    DisposableEffect(Unit) {
-        FullscreenController.onFullscreenChanged = { isFullscreen = it }
-        onDispose { FullscreenController.onFullscreenChanged = null }
-    }
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Accent, background = Bg, surface = Card,
@@ -161,28 +153,6 @@ fun App() {
                             vodPlaying = null
                         })
                     }
-                }
-            }
-
-            // Fenstersteuerung (X / Minimieren) oben rechts — erscheint nur im
-            // Vollbild, weil dort die OS-Titelleiste fehlt.
-            if (isFullscreen) {
-                Row(
-                    Modifier.align(Alignment.TopEnd)
-                        .padding(top = 8.dp, end = 8.dp)
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
-                        .background(Color(0xAA11172A))
-                        .padding(horizontal = 4.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Minimieren
-                    Text("—", color = TextHi, fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { FullscreenController.minimize() }
-                            .padding(horizontal = 10.dp, vertical = 4.dp))
-                    // Schließen
-                    Text("✕", color = Danger, fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                        modifier = Modifier.clickable { FullscreenController.close() }
-                            .padding(horizontal = 10.dp, vertical = 4.dp))
                 }
             }
         }
