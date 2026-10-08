@@ -102,11 +102,15 @@ object AppSettings {
      *  - sw:   Software-Decoding erzwingen (--avcodec-hw=none + --codec avcodec)
      *  - auto: Hybrid-GPU → Software (vermeidet grüne Blöcke); sonst Hardware
      *          zulassen (libVLC wählt den besten verfügbaren Decoder).
+     *
+     *  Zusätzlich --glconv=none: auf Hybrid-Systemen (Intel+NVIDIA) läuft sonst
+     *  die Video-AUSGABE über die VAAPI/VDPAU-GL-Konvertierung, was auch bei
+     *  sauberem Software-Decoding grüne Blöcke am unteren Bildrand erzeugt.
      */
     fun hwDecodingArgs(): List<String> = when (decodingMode()) {
         "hw" -> listOf("--avcodec-hw=any")
-        "sw" -> listOf("--avcodec-hw=none", "--codec", "avcodec")
-        else -> if (isHybridGpu()) listOf("--avcodec-hw=none", "--codec", "avcodec")
+        "sw" -> listOf("--avcodec-hw=none", "--codec", "avcodec", "--glconv=none")
+        else -> if (isHybridGpu()) listOf("--avcodec-hw=none", "--codec", "avcodec", "--glconv=none")
                 else emptyList()
     }
 }

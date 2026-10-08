@@ -75,6 +75,31 @@ class VlcPlayer {
         /** JNA-Libraryname (libvlc vs vlc). */
         fun libName(): String = jnaLibName
 
+        /** Ergebnis der System-libVLC-Suche: libvlc-Ordner + Plugin-Ordner. */
+        data class SystemVlc(val pluginDir: String)
+
+        /**
+         * Sucht ein System-libVLC (Linux). Liefert null, wenn keins installiert ist.
+         * Typische Pfade: /usr/lib/x86_64-linux-gnu (Debian/Ubuntu multiarch).
+         */
+        private fun findSystemLibVlc(): SystemVlc? {
+            val libDirs = listOf(
+                "/usr/lib/x86_64-linux-gnu",
+                "/usr/lib/aarch64-linux-gnu",
+                "/usr/lib/arm-linux-gnueabihf",
+                "/usr/lib"
+            )
+            for (d in libDirs) {
+                val lib = File(d, "libvlc.so.5")
+                val core = File(d, "libvlccore.so.9")
+                val plugins = File(d, "vlc/plugins")
+                if (lib.exists() && core.exists() && plugins.exists()) {
+                    return SystemVlc(plugins.absolutePath)
+                }
+            }
+            return null
+        }
+
         private val zipResource = if (isWindows)
             "/libvlc/libvlc-windows-x64.zip" else "/libvlc/libvlc-linux-x64.zip"
 
@@ -135,15 +160,23 @@ class VlcPlayer {
     fun init(): Boolean {
         if (mediaPlayer != null) return true
         return runCatching {
+            // Auf Linux bevorzugen wir das System-libVLC (korrekt für das System
+            // gebaut). Das gebündelte libVLC-Bundle hat auf manchen Systemen
+            // (Hybrid-GPU, brandneue Intel-CPUs) defekte VAAPI/VDPAU-Pfade, die
+            // grüne Blöcke erzeugen — das System-VLC nutzt dagegen saubere Pfade.
+            // Nur wenn kein System-libVLC vorhanden ist, fällt das Bundle ein.
             val bundled = ensureLibVlc()
-            if (bundled != null) {
+            val systemLibVlc = if (isWindows) null else findSystemLibVlc()
+            if (systemLibVlc != null) {
+                // System-libVLC: kein System.load nötig, JNA findet es über den
+                // Standard-Suchpfad. Plugin-Pfad auf die System-Plugins setzen.
+                setenv("VLC_PLUGIN_PATH", systemLibVlc.pluginDir)
+            } else if (bundled != null) {
                 // 1) libvlccore zuerst laden (transitive Abhängigkeit von libvlc)
                 runCatching { System.load(File(bundled, coreFileName).absolutePath) }
                 // 2) JNA-Suchpfad für libvlc
                 NativeLibrary.addSearchPath(jnaLibName, bundled.absolutePath)
-                // 3) Plugin-Pfad über VLC_PLUGIN_PATH (--plugin-path existiert in libVLC 3 nicht mehr)
-                //    Windows: plugins/ liegt direkt unter dem libvlc-Ordner.
-                //    Linux:   plugins/ liegt neben dem lib/-Ordner (eine Ebene drüber).
+                // 3) Plugin-Pfad über VLC_PLUGIN_PATH
                 val pluginDir = if (isWindows)
                     File(bundled, "plugins")
                 else
