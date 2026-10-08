@@ -190,9 +190,11 @@ class VlcPlayer {
             val mp = f.mediaPlayers().newEmbeddedMediaPlayer()
             val surface = f.videoSurfaces().newVideoSurface(videoCanvas)
             mp.videoSurface().set(surface)
-            // Deinterlacing: Live-TV ist interlaced — ohne das gibt es den
-            // "Kamm-Effekt" (verzerrte Kanten bei Bewegung).
-            mp.video().setDeinterlace(DeinterlaceMode.YADIF)
+            // Deinterlacing: AUTO statt hartem YADIF. libVLC erkennt dann selbst,
+            // ob ein Stream interlaced ist (deinterlacen) oder progressiv
+            // (nichts tun). Erzwungenes YADIF erzeugt auf progressivem Material
+            // (z. B. Kinowelt, 50fps) grüne/blaue Blöcke an den Frame-Rändern.
+            mp.video().setDeinterlace(DeinterlaceMode.AUTO)
             // Video-Adjust aktivieren, sonst wirken setBrightness/setContrast nicht.
             mp.video().setAdjustVideo(true)
             mp.events().addMediaPlayerEventListener(object : MediaPlayerEventAdapter() {
