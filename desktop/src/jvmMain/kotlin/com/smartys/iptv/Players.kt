@@ -70,12 +70,43 @@ object FullscreenController {
     @Volatile
     var window: java.awt.Window? = null
 
+    /** Wird aufgerufen, wenn sich der Vollbild-Zustand ändert (für Compose-UI). */
+    @Volatile
+    var onFullscreenChanged: ((Boolean) -> Unit)? = null
+
     fun toggle() {
         val w = window ?: return
         SwingUtilities.invokeLater {
             val gd = w.graphicsConfiguration?.device ?: return@invokeLater
             if (gd.fullScreenWindow == null) gd.fullScreenWindow = w
             else gd.fullScreenWindow = null
+            onFullscreenChanged?.invoke(isFullscreen())
+        }
+    }
+
+    fun isFullscreen(): Boolean {
+        val w = window ?: return false
+        val gd = w.graphicsConfiguration?.device ?: return false
+        return gd.fullScreenWindow != null
+    }
+
+    fun minimize() {
+        val w = window ?: return
+        SwingUtilities.invokeLater {
+            val gd = w.graphicsConfiguration?.device
+            if (gd?.fullScreenWindow != null) gd.fullScreenWindow = null
+            if (w is java.awt.Frame) (w as java.awt.Frame).state = java.awt.Frame.ICONIFIED
+            onFullscreenChanged?.invoke(false)
+        }
+    }
+
+    fun close() {
+        val w = window ?: return
+        SwingUtilities.invokeLater {
+            val gd = w.graphicsConfiguration?.device
+            if (gd?.fullScreenWindow != null) gd.fullScreenWindow = null
+            w.dispose()
+            System.exit(0)
         }
     }
 }
