@@ -159,7 +159,7 @@ fun SettingsScreen(vm: DesktopViewModel) {
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text("Bei verzerrtem/unsauberem Bild zuerst Auto, sonst Software (CPU) versuchen.",
+        Text("Auto erkennt das System selbst (z. B. Hybrid-Grafik → Software). Nur bei Problemen manuell wählen.",
             color = TextMid, fontSize = 12.sp)
 
         Spacer(Modifier.height(16.dp))
