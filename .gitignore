@@ -3,3 +3,6 @@ build/
 *.deb
 backups/
 .kotlin/
+*.zip
+*.so
+desktop/src/jvmMain/resources/libvlc/
