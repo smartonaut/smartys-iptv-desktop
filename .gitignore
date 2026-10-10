@@ -5,4 +5,7 @@ backups/
 .kotlin/
 *.zip
 *.so
+*.msi
+dist/
+branding/vorschlaege/
 desktop/src/jvmMain/resources/libvlc/
