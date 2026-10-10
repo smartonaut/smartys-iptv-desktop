@@ -51,6 +51,10 @@ class RecordingEngine {
      */
     fun start(url: String, outputFile: File): Boolean {
         if (recording) return false
+        // Doppel-Daemon-Schutz: kein zweiter Prozess, wenn ein frischer Lock
+        // (< 30s) bereits von einer anderen Instanz (Autostart vs. App) gesetzt
+        // wurde — sonst nimmt derselbe Timer doppelt auf.
+        if (isLocked()) return false
         // Lock setzen (Herzschlag wird vom Scheduler-Loop erneuert)
         touchLock()
         return runCatching {
