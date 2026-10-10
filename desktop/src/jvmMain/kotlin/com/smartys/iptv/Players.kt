@@ -106,6 +106,19 @@ object FullscreenController {
         }
     }
 
+    /** Verlässt den Vollbild-Modus (No-op, wenn nicht im Vollbild).
+     *  Wird beim Verlassen der Player-Screens aufgerufen: ESC im Vollbild beendet
+     *  den Player — bliebe fullScreenWindow gesetzt, hinge der User im AWT-
+     *  Vollbild im Menü fest (kein ESC-Dispatcher mehr, kein Video für Doppelklick). */
+    fun exit() {
+        val w = window ?: return
+        SwingUtilities.invokeLater {
+            val gd = w.graphicsConfiguration?.device ?: return@invokeLater
+            if (gd.fullScreenWindow != null) gd.fullScreenWindow = null
+            hideControls()
+        }
+    }
+
     fun close() {
         val w = window ?: return
         SwingUtilities.invokeLater {
@@ -420,6 +433,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         onDispose {
             recEngine.stop()
             player.release()
+            FullscreenController.exit()
         }
     }
 
@@ -540,6 +554,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             ResumeStore.save(vp.key, player.currentPositionMs(), player.durationMs())
             watcher?.stop()
             player.release()
+            FullscreenController.exit()
         }
     }
 

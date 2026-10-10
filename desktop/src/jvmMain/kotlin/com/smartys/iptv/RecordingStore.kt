@@ -64,7 +64,15 @@ object RecordingStore {
                 .put("outputPath", r.outputPath)
                 .put("streamUrl", r.streamUrl))
         }
-        file().writeText(arr.toString(2))
+        // Atomar schreiben (tmp + rename): ein Absturz mitten im writeText darf
+        // die komplette Timer-Liste nicht zerstören — App UND Daemon lesen diese Datei.
+        val f = file()
+        val tmp = File(d, "recordings.json.tmp")
+        tmp.writeText(arr.toString(2))
+        if (!tmp.renameTo(f)) {
+            tmp.copyTo(f, overwrite = true)
+            tmp.delete()
+        }
     }
 
     fun add(r: Recording) {
