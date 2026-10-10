@@ -55,7 +55,12 @@ object XmltvEpg {
                     URL(xmltvUrl).openStream().use { input ->
                         tmp.outputStream().use { input.copyTo(it, 1 shl 16) }
                     }
-                    tmp.renameTo(cache)
+                    if (!tmp.renameTo(cache)) {
+                        // Rename kann auf manchen Dateisystemen schiefgehen, wenn
+                        // das Ziel noch offen ist — dann direkt kopieren + Rest löschen.
+                        tmp.copyTo(cache, overwrite = true)
+                        tmp.delete()
+                    }
                 }
                 parse(cache)
                 loaded = true

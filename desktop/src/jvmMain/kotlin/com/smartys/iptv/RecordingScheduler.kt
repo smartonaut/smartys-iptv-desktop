@@ -12,6 +12,9 @@ class RecordingScheduler {
     private val engine = RecordingEngine()
     private var activeId: String? = null
     private val activeFile = java.io.File(System.getProperty("user.home"), ".smartys-iptv/active_recording")
+    /** Timer-IDs, deren Start fehlgeschlagen ist (In-Memory, damit der Timer im
+     *  Store sichtbar bleibt, aber nicht jeden Tick (10 s) erneut probiert wird). */
+    private val skippedIds = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
     /** Einmaliger Tick: prüft fällige Aufnahmen. */
     suspend fun tick() {
@@ -26,16 +29,26 @@ class RecordingScheduler {
             }
         }
 
-        // 2) Fällige Aufnahme starten (die nächste, die jetzt dran ist und noch nicht läuft)
+        // 2) Lock-Herzschlag erneuern, solange eine Aufnahme läuft (sonst läuft
+        //    die 30-s-Frische von isLocked() ab, obwohl noch aufgenommen wird).
+        if (activeId != null) RecordingEngine.touchLock()
+
+        // 3) Fällige Aufnahme starten (die nächste, die jetzt dran ist und noch nicht läuft)
         if (activeId == null) {
             val due = list
                 .filter { now >= it.startEpoch && now < it.endEpoch && it.streamUrl.isNotBlank() }
+                .filter { it.id !in skippedIds }
                 .minByOrNull { it.startEpoch }
             if (due != null) {
                 val ok = engine.start(due.streamUrl, File(due.outputPath))
                 if (ok) {
                     activeId = due.id
                     activeFile.writeText(due.id)
+                } else {
+                    // Start fehlgeschlagen (z. B. Stream tot): diesen Timer nur für
+                    // diese Session überspringen — sonst würde er jeden Tick (10 s)
+                    // erneut probiert. Der Timer bleibt im Store sichtbar.
+                    skippedIds.add(due.id)
                 }
             }
         }

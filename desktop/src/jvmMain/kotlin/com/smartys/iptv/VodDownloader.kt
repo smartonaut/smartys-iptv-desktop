@@ -107,7 +107,7 @@ object VodDownloader {
                 readTimeout = 30000
                 instanceFollowRedirects = true
                 setRequestProperty("Range", "bytes=$startFrom-")
-                setRequestProperty("User-Agent", "SmartysIPTV/1.4 (okhttp)")
+                setRequestProperty("User-Agent", "SmartysIPTV/1.5.0 (okhttp)")
             }
             var code = conn.responseCode
             val resume = code == 206 && startFrom > 0L
@@ -121,7 +121,7 @@ object VodDownloader {
                 conn = (URL(item.url).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15000; readTimeout = 30000
                     setRequestProperty("Range", "bytes=0-")
-                    setRequestProperty("User-Agent", "SmartysIPTV/1.4 (okhttp)")
+                    setRequestProperty("User-Agent", "SmartysIPTV/1.5.0 (okhttp)")
                 }
                 code = conn.responseCode
             }

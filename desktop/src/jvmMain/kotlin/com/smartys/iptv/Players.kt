@@ -47,11 +47,15 @@ enum class AdhocRecMode { CURRENT_SHOW, ENDLESS }
  */
 @Composable
 private fun EscapeToBack(onBack: () -> Unit) {
+    // onBack in einer val-Kopie halten, damit der Dispatcher immer die AKTUELLE
+    // Lamba aufruft (remember ohne keys würde sonst die erste onBack-Instanz
+    // für die gesamte Lebensdauer einfrieren).
+    val currentOnBack by rememberUpdatedState(onBack)
     val dispatcher = remember {
         object : KeyEventDispatcher {
             override fun dispatchKeyEvent(e: KeyEvent): Boolean {
                 if (e.id == KeyEvent.KEY_PRESSED && e.keyCode == KeyEvent.VK_ESCAPE) {
-                    onBack()
+                    currentOnBack()
                     return true
                 }
                 return false
@@ -250,13 +254,15 @@ private fun RecordKeys(onStartRequest: () -> Unit, onStop: () -> Unit) {
     }
 }
 
-/** Startet eine Ad-hoc-Aufnahme des laufenden Kanals in eine dauerhafte Datei. */
-private fun startAdhocRecording(engine: RecordingEngine, vm: DesktopViewModel, ch: LiveStream, mode: AdhocRecMode) {
-    val url = vm.streamUrlFor(ch) ?: return
+/** Startet eine Ad-hoc-Aufnahme des laufenden Kanals in eine dauerhafte Datei.
+ *  Liefert false, wenn die Aufnahme nicht gestartet werden konnte (z. B. weil
+ *  bereits eine andere Aufnahme läuft). */
+private fun startAdhocRecording(engine: RecordingEngine, vm: DesktopViewModel, ch: LiveStream, mode: AdhocRecMode): Boolean {
+    val url = vm.streamUrlFor(ch) ?: return false
     val dir = File(AppSettings.recordingsDir())
     val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
     val fname = "${ch.name.replace(Regex("[^A-Za-z0-9._-]"), "_")}_$ts.ts"
-    engine.start(url, File(dir, fname))
+    return engine.start(url, File(dir, fname))
 }
 
 /** Pfeil hoch/runter = Lautstärke +10/-10. */
@@ -403,6 +409,9 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 kotlinx.coroutines.delay(end - System.currentTimeMillis())
                 recEngine.stop()
                 recMode = null
+            } else {
+                // Kein EPG-Ende bekannt: dauerhaft aufnehmen (bis S).
+                recMode = AdhocRecMode.ENDLESS
             }
         }
     }
@@ -481,16 +490,14 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             confirmButton = {
                 TextButton(onClick = {
                     showRecDialog = false
-                    startAdhocRecording(recEngine, vm, ch, AdhocRecMode.CURRENT_SHOW)
-                    recMode = AdhocRecMode.CURRENT_SHOW
+                    recMode = if (startAdhocRecording(recEngine, vm, ch, AdhocRecMode.CURRENT_SHOW)) AdhocRecMode.CURRENT_SHOW else null
                 }) { Text("Laufende Sendung", color = Accent) }
             },
             dismissButton = {
                 Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = {
                         showRecDialog = false
-                        startAdhocRecording(recEngine, vm, ch, AdhocRecMode.ENDLESS)
-                        recMode = AdhocRecMode.ENDLESS
+                        recMode = if (startAdhocRecording(recEngine, vm, ch, AdhocRecMode.ENDLESS)) AdhocRecMode.ENDLESS else null
                     }) { Text("Endlos (bis S)", color = TextHi) }
                     TextButton(onClick = { showRecDialog = false }) { Text("Abbrechen", color = TextMid) }
                 }

@@ -311,7 +311,7 @@ class DesktopViewModel {
     }.getOrNull()
 
     fun sendSupport(mac: String, message: String): Boolean = runCatching {
-        val payload = org.json.JSONObject().put("mac", mac).put("message", message).put("app_version", "1.4")
+        val payload = org.json.JSONObject().put("mac", mac).put("message", message).put("app_version", "1.5.0")
         val conn = java.net.URL("https://panel.smartys.tech/api/v1/support").openConnection() as javax.net.ssl.HttpsURLConnection
         conn.requestMethod = "POST"; conn.doOutput = true
         conn.connectTimeout = 8000; conn.readTimeout = 8000

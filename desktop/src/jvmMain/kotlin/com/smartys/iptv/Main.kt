@@ -147,11 +147,18 @@ fun App() {
                         }
                     }
 
-                    // VOD-Player (Overlay, inkl. Auto-Advance bei Serien)
+                    // VOD-Player (Overlay, inkl. Auto-Advance bei Serien).
+                    // key(vp.key): Beim Auto-Advance wechselt vp OHNE dass vodPlaying
+                    // zwischendurch null wird — ohne key würde VodPlayerScreen nur
+                    // rekombinieren (derselbe VlcPlayer, inited bleibt true) und die
+                    // neue URL NIE per play() starten. Mit key wird der Player sauber
+                    // disposed + neu initialisiert (wie beim manuellen Öffnen).
                     vodPlaying?.let { vp ->
-                        VodPlayerScreen(vp, vm, onBack = {
-                            vodPlaying = null
-                        })
+                        key(vp.key) {
+                            VodPlayerScreen(vp, vm, onBack = {
+                                vodPlaying = null
+                            })
+                        }
                     }
                 }
             }
