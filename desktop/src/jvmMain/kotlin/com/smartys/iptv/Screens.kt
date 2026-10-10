@@ -154,8 +154,18 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
         PinDialog(
             title = "FSK18 — ${ch.name}",
             onDismiss = { pinFor = null },
-            onUnlock = { if (ParentalControl.verify(it)) { ChannelPrefs.setLocked(ch.streamId, false); onPlay(ch) } },
-            onSetPin = { ParentalControl.setPin(it); ChannelPrefs.setLocked(ch.streamId, true) })
+            onUnlock = {
+                if (ParentalControl.verify(it)) {
+                    ChannelPrefs.setLocked(ch.streamId, false)
+                    pinFor = null
+                    onPlay(ch)
+                }
+            },
+            onSetPin = {
+                ParentalControl.setPin(it)
+                ChannelPrefs.setLocked(ch.streamId, true)
+                pinFor = null
+            })
     }
 }
 
