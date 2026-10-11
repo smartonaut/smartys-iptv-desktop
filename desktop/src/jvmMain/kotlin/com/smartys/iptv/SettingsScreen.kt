@@ -261,6 +261,10 @@ fun SettingsScreen(vm: DesktopViewModel) {
             ChannelPrefs.unhideAll()
         }
         Spacer(Modifier.height(8.dp))
+        SettingButton("Kategorie-Sortierung zurücksetzen (Live-TV)") {
+            CategoryPrefs.unhideAll("live")
+        }
+        Spacer(Modifier.height(8.dp))
         SettingButton("Kategorie-Sortierung zurücksetzen (Filme)") {
             CategoryPrefs.unhideAll("movies")
         }

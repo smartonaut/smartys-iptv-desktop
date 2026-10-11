@@ -58,12 +58,19 @@ fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRad
 // ---------- Live-TV ----------
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit, onStop: () -> Unit = {}, floatingChannel: LiveStream? = null, onMultiView: () -> Unit = {}) {
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var favMode by remember { mutableStateOf(false) }
     var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode()) }
     var channelMenuFor by remember { mutableStateOf<LiveStream?>(null) }
     var pinFor by remember { mutableStateOf<LiveStream?>(null) }
+
+    // Kategorie-Verwaltung (User-Vorgabe: Sortierung + Ausblenden wie VOD):
+    // Langdruck auf Kategorie -> Menü; catsVersion triggert Neu-Sortierung.
+    var catMenuFor by remember { mutableStateOf<Category?>(null) }
+    var catsVersion by remember { mutableStateOf(0) }
+    val shownCats = remember(state.categories, catsVersion) { CategoryPrefs.applyTo("live", state.categories) }
 
     val applied = remember(state.channels, selectedCat, favMode, vm.favorites, sortMode) {
         var list = when {
@@ -90,12 +97,28 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                     fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth().clickable { favMode = true; selectedCat = null }.padding(horizontal = 16.dp, vertical = 8.dp))
             }
-            items(state.categories) { cat ->
+            items(shownCats) { cat ->
                 Text(cat.name,
                     color = if (selectedCat == cat.id && !favMode) Accent else TextMid,
                     fontWeight = if (selectedCat == cat.id && !favMode) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 14.sp,
-                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = cat.id; favMode = false }.padding(horizontal = 16.dp, vertical = 8.dp))
+                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                        onClick = { selectedCat = cat.id; favMode = false },
+                        onLongClick = { catMenuFor = cat }
+                    ).padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            val hiddenCats = state.categories.size - shownCats.size
+            if (hiddenCats > 0) {
+                item {
+                    Text(
+                        "⚙ $hiddenCats ausgeblendet — alle einblenden",
+                        color = TextMid, fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            CategoryPrefs.unhideAll("live")
+                            catsVersion++
+                        }.padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
+                }
             }
         }
 
@@ -174,6 +197,24 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
         }
     }
 
+    // Kategorie-Langdruck-Menü (Sortierung/Ausblenden, User-Vorgabe)
+    catMenuFor?.let { cat ->
+        CategoryMenuDialog(
+            cat = cat,
+            hiddenCount = state.categories.size - shownCats.size,
+            onDismiss = { catMenuFor = null },
+            onMoveUp = { CategoryPrefs.move("live", cat.id, shownCats, -1); catsVersion++; catMenuFor = null },
+            onMoveDown = { CategoryPrefs.move("live", cat.id, shownCats, 1); catsVersion++; catMenuFor = null },
+            onHide = {
+                CategoryPrefs.hide("live", cat.id)
+                if (selectedCat == cat.id) selectedCat = null
+                catsVersion++
+                catMenuFor = null
+            },
+            onUnhideAll = { CategoryPrefs.unhideAll("live"); catsVersion++; catMenuFor = null }
+        )
+    }
+
     // Kanal-Langdruck-Menü
     channelMenuFor?.let { ch ->
         ChannelMenuDialog(ch,
@@ -245,6 +286,32 @@ private fun ChannelRow(ch: LiveStream, vm: DesktopViewModel, isFav: Boolean, onT
             modifier = Modifier.clickable(onClick = onToggleFav).padding(horizontal = 10.dp)
         )
     }
+}
+
+@Composable
+private fun CategoryMenuDialog(
+    cat: Category,
+    hiddenCount: Int,
+    onDismiss: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onHide: () -> Unit,
+    onUnhideAll: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = Card,
+        title = { Text(cat.name, color = TextHi, fontSize = 18.sp) },
+        text = {
+            Column {
+                MenuItem("Nach oben verschieben", onMoveUp)
+                MenuItem("Nach unten verschieben", onMoveDown)
+                MenuItem("Ausblenden", onHide)
+                if (hiddenCount > 0) MenuItem("Alle ausgeblendeten einblenden", onUnhideAll)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen", color = Accent) } }
+    )
 }
 
 @OptIn(ExperimentalFoundationApi::class)
