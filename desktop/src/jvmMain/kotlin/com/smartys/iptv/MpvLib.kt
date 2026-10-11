@@ -37,12 +37,16 @@ interface MpvLib : Library {
          * Extrahiert das gebündelte libmpv (inkl. ffmpeg-Deps) beim ersten Start
          * nach ~/.smartys-iptv/libmpv/ und liefert das lib/-Verzeichnis.
          * Gleiches Muster wie VlcPlayer.ensureLibVlc().
+         *
+         * 1.5.10: VERIFIZIERT extrahieren — Grund war der 1.5.9-Windows-Freezer:
+         * eine alte, fremde libmpv-2.dll im Zielordner wurde blind geladen
+         * (Marker da = überspringen). Jetzt wird die Dateigröße gegen den
+         * gebündelten Zip-Eintrag verglichen; Abweichung = neu extrahieren.
          */
         private fun ensureLibMpv(): File? = runCatching {
             val home = File(System.getProperty("user.home"), ".smartys-iptv/libmpv")
             val marker = if (isWindows) File(home, "libmpv-2.dll") else File(home, "lib/libmpv.so")
-            if (!marker.exists()) {
-                val resPath = if (isWindows) "/libmpv/libmpv-windows-x64.zip" else "/libmpv/libmpv-linux-x64.zip"
+            if (!marker.exists() || (zipEntrySize() > 0 && marker.length() != zipEntrySize())) {
                 val zipRes = MpvLib::class.java.getResourceAsStream(resPath)
                     ?: return@runCatching null
                 home.mkdirs()
@@ -63,6 +67,25 @@ interface MpvLib : Library {
             }
             if (isWindows) home else File(home, "lib")
         }.getOrNull()
+
+        /** Erwartete Dateigröße des DLL/SO-Eintrags im gebündelten Zip (-1 = unbekannt). */
+        private val resPath
+            get() = if (isWindows) "/libmpv/libmpv-windows-x64.zip" else "/libmpv/libmpv-linux-x64.zip"
+
+        private fun zipEntrySize(): Long = runCatching {
+            // Gesuchter Eintrag: Windows "libmpv-2.dll", Linux "lib/libmpv.so"
+            val wanted = if (isWindows) "libmpv-2.dll" else "lib/libmpv.so"
+            val zs = MpvLib::class.java.getResourceAsStream(resPath) ?: return@runCatching -1L
+            ZipInputStream(zs).use { zis ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    if (e.name == wanted) return@use e.size
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                }
+                -1L
+            }
+        }.getOrDefault(-1L)
 
         val INSTANCE: MpvLib by lazy {
             // Windows: shinchiro-Build liefert die DLL als "libmpv-2.dll"

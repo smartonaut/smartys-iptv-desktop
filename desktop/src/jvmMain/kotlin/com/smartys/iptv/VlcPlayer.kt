@@ -108,6 +108,21 @@ class VlcPlayer : VodPlayerApi {
         private val zipResource = if (isWindows)
             "/libvlc/libvlc-windows-x64.zip" else "/libvlc/libvlc-linux-x64.zip"
 
+        /** Erwartete Größe der Marker-Datei im gebündelten Zip (-1 = unbekannt). */
+        private fun markerEntrySize(): Long = runCatching {
+            val wanted = if (isWindows) "libvlccore.dll" else "lib/libdvbpsi.so.10"
+            val zs = VlcPlayer::class.java.getResourceAsStream(zipResource) ?: return@runCatching -1L
+            ZipInputStream(zs).use { zis ->
+                var e = zis.nextEntry
+                while (e != null) {
+                    if (e.name == wanted) return@use e.size
+                    zis.closeEntry()
+                    e = zis.nextEntry
+                }
+                -1L
+            }
+        }.getOrDefault(-1L)
+
         /**
          * Extrahiert das gebündelte libVLC und liefert den Ordner, der die
          * Core-Bibliothek enthält (oder null).
@@ -123,11 +138,16 @@ class VlcPlayer : VodPlayerApi {
                 val home = File(System.getProperty("user.home"), ".smartys-iptv/libvlc")
                 // Marker = Datei, die NUR das VOLLSTÄNDIGE Bundle enthält. So
                 // wird bei einer alten/fehlenden Extraktion neu extrahiert.
+                // 1.5.10: ZUSÄTZLICH Größen-Verifikation — passt die Marker-Datei
+                // nicht zu ihrem Zip-Eintrag (fremde/veraltete Dateien im Ordner),
+                // wird NEU extrahiert. Grundlage war der 1.5.9-Windows-Freezer
+                // durch ein Relikt im Zielordner.
                 val marker = if (isWindows)
                     File(home, "libvlccore.dll")
                 else
                     File(home, "lib/libdvbpsi.so.10")
-                if (!marker.exists()) {
+                val expected = markerEntrySize()
+                if (!marker.exists() || (expected > 0 && marker.length() != expected)) {
                     val zipRes = VlcPlayer::class.java.getResourceAsStream(zipResource)
                         ?: return@runCatching null
                     home.mkdirs()
