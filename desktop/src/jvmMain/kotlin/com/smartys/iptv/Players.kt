@@ -467,7 +467,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             if (u != null) {
                 tsServerActive = true
                 player.stop()
-                player.play(u, isVod = false, timeshift = false, timeshiftDir = null)
+                player.play(u, isVod = false, timeshift = false, timeshiftDir = null, startPosMs = 0)
                 player.pause()
                 paused = true
                 player.showOsd("⏸ Pause — zurück mit ◀", 2000)
@@ -728,7 +728,10 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
 
     DisposableEffect(Unit) {
         onDispose {
-            ResumeStore.save(vp.key, player.currentPositionMs(), player.durationMs())
+            val endPos = player.currentPositionMs()
+            val endDur = player.durationMs()
+            ResumeStore.save(vp.key, endPos, endDur)
+            vp.seriesId?.let { sid -> ResumeStore.saveSeriesLast(sid, vp.streamId, endPos, endDur) }
             watcher?.stop()
             // Sauberer libVLC-Stop VOR release (sonst 407 beim nächsten Titel).
             player.stop()
@@ -740,11 +743,21 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         }
     }
 
-    // Positions-Polling + Abspann-Erkennung
+    // Positions-Polling + Abspann-Erkennung + Resume-Punkt alle 60 s:
+    // Unterbrechung (Stop, Crash, Strom) verliert maximal 60 Sekunden —
+    // "Weiter schauen" startet dann fast exakt an der Abbruchstelle.
     LaunchedEffect(Unit) {
+        var lastSavedPos = 0L
         while (true) {
             positionMs = player.currentPositionMs()
             durationMs = player.durationMs()
+            if (positionMs > 0 && positionMs - lastSavedPos >= 60_000L) {
+                lastSavedPos = positionMs
+                ResumeStore.save(vp.key, positionMs, durationMs)
+                vp.seriesId?.let { sid ->
+                    ResumeStore.saveSeriesLast(sid, vp.streamId, positionMs, durationMs)
+                }
+            }
             delay(500)
         }
     }
@@ -779,8 +792,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                                     watcher = w
                                     scope.launch { w.run() }
                                 }
-                                player.play(vp.url, isVod = true)
-                                if (startPos > 0) player.seekTo(startPos)
+                                player.play(vp.url, isVod = true, startPosMs = startPos)
                             }
                         }
                     }

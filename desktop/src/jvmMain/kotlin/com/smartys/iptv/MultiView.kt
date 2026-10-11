@@ -149,7 +149,7 @@ private fun MultiViewCell(
                     player.videoCanvas = canvas
                     val start = {
                         if (player.init()) {
-                            player.play(url, isVod = false, timeshift = false, timeshiftDir = null)
+                            player.play(url, isVod = false, timeshift = false, timeshiftDir = null, startPosMs = 0)
                             player.setMuted(!isActive)
                         }
                     }

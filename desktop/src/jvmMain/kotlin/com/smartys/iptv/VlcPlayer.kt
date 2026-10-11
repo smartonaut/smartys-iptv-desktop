@@ -259,7 +259,7 @@ class VlcPlayer : VodPlayerApi {
     /** Stream/MRL abspielen. isVod = true verhindert Reconnect und feuert onVodEnded.
      *  timeshift = true puffert den Stream auf die Platte (libVLC input-timeshift),
      *  sodass Pause + Zurückspulen am Live-Kanal möglich sind. */
-    override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?) {
+    override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?, startPosMs: Long) {
         val mp = mediaPlayer ?: return
         currentUrl = url
         currentIsVod = isVod
@@ -269,6 +269,11 @@ class VlcPlayer : VodPlayerApi {
                 opts.add(":input-timeshift-dir=$it")
             }
             mp.media().play(url, *opts.toTypedArray())
+        } else if (startPosMs > 0) {
+            // Resume: VLC öffnet den Titel DIREKT ab dieser Position — ein
+            // seekTo() direkt nach dem asynchronen play() verpufft, weil die
+            // Media zu dem Zeitpunkt noch nicht geladen ist.
+            mp.media().play(url, ":start-time=${startPosMs / 1000.0}")
         } else {
             mp.media().play(url)
         }

@@ -46,7 +46,8 @@ data class VodPlaying(
     val poster: String?,
     val isEpisode: Boolean = false,
     val next: (() -> Unit)? = null,  // Auto-Advance zur nächsten Episode
-    val forceStartPos: Long? = null  // null = auto-resume, 0L = von vorne, >0 = feste Position
+    val forceStartPos: Long? = null,  // null = auto-resume, 0L = von vorne, >0 = feste Position
+    val seriesId: String? = null     // Serie: "Weiter schauen"-Pointer (ResumeStore.saveSeriesLast)
 )
 
 @Composable
@@ -138,7 +139,7 @@ fun App() {
                     showSeries?.let { show ->
                         SeriesDetailScreen(vm, show,
                             onBack = { showSeries = null },
-                            onPlayEpisode = { allEps, idx ->
+                            onPlayEpisode = { allEps, idx, forceStartPos ->
                                 val ep = allEps.getOrNull(idx) ?: return@SeriesDetailScreen
                                 val c = vm.creds ?: return@SeriesDetailScreen
                                 val url = c.seriesUrl(ep.id, ep.containerExtension ?: "mp4")
@@ -152,11 +153,11 @@ fun App() {
                                         vodPlaying = VodPlaying(
                                             nextTitle,
                                             c.seriesUrl(nextEp.id, nextEp.containerExtension ?: "mp4"),
-                                            nextKey, nextEp.id, show.cover, true, null
+                                            nextKey, nextEp.id, show.cover, true, null, null, show.seriesId
                                         )
                                     }
                                 }
-                                vodPlaying = VodPlaying(title, url, key, ep.id, show.cover, true, next)
+                                vodPlaying = VodPlaying(title, url, key, ep.id, show.cover, true, next, forceStartPos, show.seriesId)
                             })
                     }
 

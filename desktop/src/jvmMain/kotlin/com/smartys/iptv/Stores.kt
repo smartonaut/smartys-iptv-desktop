@@ -99,6 +99,24 @@ object ResumeStore {
         val finished = durationMs > 0 && posMs > 0 && posMs >= durationMs * 95 / 100
         if (finished) prefs().remove(key) else prefs().putLong(key, posMs)
     }
+
+    /** Zuletzt gesehene Episode einer Serie (Pointer für den
+     *  "Weiter schauen"-Button auf der Serien-Detailseite).
+     *  Bei >= 95 % Fortschritt gilt die Episode als beendet → Pointer weg. */
+    fun saveSeriesLast(seriesId: String, epId: String, posMs: Long, durationMs: Long) {
+        val finished = durationMs > 0 && posMs > 0 && posMs >= durationMs * 95 / 100
+        if (finished) prefs().remove("slast:$seriesId")
+        else prefs().put("slast:$seriesId", "$epId|$posMs")
+    }
+
+    /** (epId, Position) der zuletztgesehenen Episode — null wenn keine. */
+    fun seriesLast(seriesId: String): Pair<String, Long>? {
+        val v = prefs().get("slast:$seriesId", null) ?: return null
+        val i = v.indexOf('|')
+        if (i <= 0) return null
+        val pos = v.substring(i + 1).toLongOrNull() ?: return null
+        return v.substring(0, i) to pos
+    }
     fun clear(key: String) { prefs().remove(key) }
 }
 

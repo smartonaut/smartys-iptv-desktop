@@ -219,12 +219,18 @@ class MpvPlayer : VodPlayerApi {
     }
 
     /** Stream/MRL abspielen. isVod = true verhindert Reconnect und feuert onVodEnded. */
-    override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?) {
+    override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?, startPosMs: Long) {
         val ctx = handle ?: return
         currentUrl = url
         currentIsVod = isVod
         val args = arrayOf("loadfile", url, "replace")
         MpvLib.INSTANCE.mpv_command(ctx, args)
+        // Resume: Seek direkt nach loadfile (mpv queued die Befehle — vor dem
+        // VLC-Umbau so bewährt). "start"-Property bewusst NICHT setzen, sie
+        // klebt an allen nachfolgenden loadfiles.
+        if (startPosMs > 0) {
+            MpvLib.INSTANCE.mpv_command(ctx, arrayOf("seek", (startPosMs / 1000.0).toString(), "absolute"))
+        }
         // Timeshift: auf die Platte puffern (wie libVLC input-timeshift)
         if (timeshift) {
             MpvLib.INSTANCE.mpv_set_property_string(ctx, "stream-buffer-size", "64MiB")

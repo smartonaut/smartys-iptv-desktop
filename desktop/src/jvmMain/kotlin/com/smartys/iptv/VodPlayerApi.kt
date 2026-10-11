@@ -20,7 +20,7 @@ interface VodPlayerApi {
     var onVodEnded: (() -> Unit)?
 
     fun init(): Boolean
-    fun play(url: String, isVod: Boolean = false, timeshift: Boolean = false, timeshiftDir: String? = null)
+    fun play(url: String, isVod: Boolean = false, timeshift: Boolean = false, timeshiftDir: String? = null, startPosMs: Long = 0)
     fun pause()
     fun resume()
     fun stop()

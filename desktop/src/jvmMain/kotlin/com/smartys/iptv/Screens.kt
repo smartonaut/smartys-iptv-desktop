@@ -468,7 +468,7 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                             onClick = { onPlay(null) },  // null = auto-resume
                             colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)
                         ) {
-                            Text("▶ Fortsetzen (${fmtPos(resumePos)})", fontWeight = FontWeight.Bold)
+                            Text("▶ Weiter schauen (${fmtPos(resumePos)})", fontWeight = FontWeight.Bold)
                         }
                     }
                     // Von vorne
@@ -570,7 +570,7 @@ fun SeriesDetailScreen(
     vm: DesktopViewModel,
     show: SeriesStream,
     onBack: () -> Unit,
-    onPlayEpisode: (List<SeriesEpisode>, Int) -> Unit
+    onPlayEpisode: (List<SeriesEpisode>, Int, Long?) -> Unit
 ) {
     val scope = rememberCoroutineScope()
     var info by remember { mutableStateOf<SeriesInfo?>(null) }
@@ -593,11 +593,52 @@ fun SeriesDetailScreen(
         }
 
         Row(Modifier.fillMaxSize()) {
-            // Cover + Beschreibung
+            // Cover + Beschreibung + Start-Buttons
             Column(Modifier.width(240.dp).padding(20.dp)) {
                 Poster(show.cover, show.name, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
                 Spacer(Modifier.height(14.dp))
                 show.plot?.let { Text(it, color = TextMid, fontSize = 13.sp, maxLines = 6, overflow = TextOverflow.Ellipsis) }
+                Spacer(Modifier.height(16.dp))
+
+                // Start-Buttons: "Weiter schauen" auf die zuletztgesehene
+                // Episode (Auto-Resume) oder "Von vorne" ab Staffel 1 Folge 1.
+                val last = remember(show.seriesId, loading) { ResumeStore.seriesLast(show.seriesId) }
+                val allEps = remember(info) { (info?.seasons.orEmpty()).flatMap { it.episodes.orEmpty() } }
+                if (loading) {
+                    // noch keine Episodendaten — keine Buttons
+                } else if (allEps.isEmpty()) {
+                    Text("Keine Episoden gefunden", color = TextMid, fontSize = 13.sp)
+                } else if (last != null) {
+                    val idx = allEps.indexOfFirst { it.id == last.first }
+                    if (idx >= 0) {
+                        val epTitle = allEps[idx].title ?: "Episode ${allEps[idx].episodeNum}"
+                        Button(
+                            onClick = { onPlayEpisode(allEps, idx, null) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                "▶ Weiter schauen\n${epTitle} · ${fmtPos(last.second)}",
+                                fontWeight = FontWeight.Bold, fontSize = 13.sp
+                            )
+                        }
+                        Spacer(Modifier.height(10.dp))
+                        OutlinedButton(
+                            onClick = { onPlayEpisode(allEps, 0, 0L) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Von vorne abspielen", color = TextHi, fontSize = 13.sp)
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { onPlayEpisode(allEps, 0, 0L) },
+                        colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("▶ Erste Episode abspielen", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
             }
 
             // Staffeln + Episoden
@@ -618,7 +659,7 @@ fun SeriesDetailScreen(
                             items(season.episodes.orEmpty(), key = { it.id }) { ep ->
                                 val all = seasons.flatMap { it.episodes.orEmpty() }
                                 val idx = all.indexOfFirst { it.id == ep.id }
-                                EpisodeRow(vm, show, ep, onPlay = { onPlayEpisode(all, idx) })
+                                EpisodeRow(vm, show, ep, onPlay = { onPlayEpisode(all, idx, null) })
                             }
                         }
                     }
