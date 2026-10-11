@@ -9,3 +9,4 @@ backups/
 dist/
 branding/vorschlaege/
 desktop/src/jvmMain/resources/libvlc/
+desktop/src/jvmMain/resources/libmpv/

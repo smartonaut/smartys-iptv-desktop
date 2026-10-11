@@ -2,10 +2,13 @@ package com.smartys.iptv
 
 import com.sun.jna.Library
 import com.sun.jna.Native
+import com.sun.jna.NativeLibrary
 import com.sun.jna.Pointer
 import com.sun.jna.Structure
 import com.sun.jna.ptr.LongByReference
 import com.sun.jna.ptr.PointerByReference
+import java.io.File
+import java.util.zip.ZipInputStream
 
 /**
  * libmpv C-API (include/mpv/client.h) — minimale JNA-Bindings.
@@ -27,9 +30,45 @@ interface MpvLib : Library {
     fun mpv_free(data: Pointer)
 
     companion object {
+        private val isWindows =
+            System.getProperty("os.name").lowercase().contains("win")
+
+        /**
+         * Extrahiert das gebündelte libmpv (inkl. ffmpeg-Deps) beim ersten Start
+         * nach ~/.smartys-iptv/libmpv/ und liefert das lib/-Verzeichnis.
+         * Gleiches Muster wie VlcPlayer.ensureLibVlc().
+         */
+        private fun ensureLibMpv(): File? = runCatching {
+            val home = File(System.getProperty("user.home"), ".smartys-iptv/libmpv")
+            val marker = File(home, "lib/libmpv.so")
+            if (!marker.exists()) {
+                val zipRes = MpvLib::class.java.getResourceAsStream("/libmpv/libmpv-linux-x64.zip")
+                    ?: return@runCatching null
+                home.mkdirs()
+                ZipInputStream(zipRes).use { zis ->
+                    var entry = zis.nextEntry
+                    while (entry != null) {
+                        val target = File(home, entry.name)
+                        if (entry.isDirectory) {
+                            target.mkdirs()
+                        } else {
+                            target.parentFile?.mkdirs()
+                            target.outputStream().use { zis.copyTo(it, 1 shl 16) }
+                        }
+                        zis.closeEntry()
+                        entry = zis.nextEntry
+                    }
+                }
+            }
+            File(home, "lib")
+        }.getOrNull()
+
         val INSTANCE: MpvLib by lazy {
+            if (!isWindows) {
+                ensureLibMpv()?.let { NativeLibrary.addSearchPath("mpv", it.absolutePath) }
+            }
             Native.load(
-                if (System.getProperty("os.name").lowercase().contains("win")) "mpv-2" else "mpv",
+                if (isWindows) "mpv-2" else "mpv",
                 MpvLib::class.java
             )
         }

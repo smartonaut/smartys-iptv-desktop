@@ -51,7 +51,7 @@ compose.desktop {
         mainClass = "com.smartys.iptv.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Dmg)
+            targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Dmg)
             packageName = "SmartysIPTV"
             packageVersion = "1.5.0"
             description = "Smartys IPTV — Live-TV, Filme und Serien auf dem Desktop"
