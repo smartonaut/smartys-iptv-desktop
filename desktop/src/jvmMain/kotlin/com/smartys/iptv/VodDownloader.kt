@@ -133,14 +133,21 @@ object VodDownloader {
             conn.inputStream.use { input ->
                 val buf = ByteArray(64 * 1024)
                 var downloaded = startFrom
+                var lastUiUpdate = 0L
                 while (true) {
                     if (paused[id] == true) { persist(); return }
                     val read = input.read(buf)
                     if (read < 0) break
                     raf.write(buf, 0, read)
                     downloaded += read
-                    update(id) { it.copy(downloadedBytes = downloaded) }
+                    // Fortschritt drosseln (nicht bei jedem 64-KB-Chunk in die UI schreiben).
+                    val now = System.currentTimeMillis()
+                    if (now - lastUiUpdate >= 250) {
+                        update(id) { it.copy(downloadedBytes = downloaded) }
+                        lastUiUpdate = now
+                    }
                 }
+                update(id) { it.copy(downloadedBytes = downloaded) }
             }
             raf.close(); raf = null
 
