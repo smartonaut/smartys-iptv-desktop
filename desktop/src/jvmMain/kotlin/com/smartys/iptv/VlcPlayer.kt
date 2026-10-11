@@ -12,7 +12,12 @@ import uk.co.caprica.vlcj.player.embedded.EmbeddedMediaPlayer
 import java.awt.Canvas
 import java.io.File
 import java.util.zip.ZipInputStream
+import javax.swing.BorderFactory
+import javax.swing.JLabel
+import javax.swing.JWindow
+import javax.swing.SwingConstants
 import javax.swing.SwingUtilities
+import javax.swing.Timer
 
 /**
  * Desktop-Wiedergabe über libVLC (vlcj). Einbettung des Videos in ein
@@ -369,6 +374,12 @@ class VlcPlayer : VodPlayerApi {
     override fun showOsd(text: String, timeoutMs: Int,
                 position: MarqueePosition,
                 color: java.awt.Color) {
+        // 1.5.12 Plattform-Split: Das VLC-Marquee verkeilt sich unter Windows
+        // im D3D-Video-Output (Beweis: app.log 1.5.11, 'marquee' ohne Rueckkehr,
+        // Bild+App tot bei schnellem Zweit-OSD). Linux laeuft sauber und bleibt
+        // beim Marquee. Windows bekommt ein reines Java-Overlay-Fenster ueber
+        // dem Canvas — KEINE native Calls, kann nicht deadlocken, klick-durchlaessig.
+        if (isWindows) { showOsdOverlay(text, timeoutMs, color); return }
         val mp = mediaPlayer ?: return
         runCatching {
             val m = mp.marquee()
@@ -384,8 +395,88 @@ class VlcPlayer : VodPlayerApi {
         }
     }
 
-    /** Senderlogo als VLC-Logo-Overlay (ins Videobild, links unten). */
+    // ---------------- Windows-OSD: Java-Overlay statt VLC-Filter ----------------
+
+    private var osdWin: JWindow? = null
+    private var osdLabel: JLabel? = null
+    private var osdHide: Timer? = null
+
+    /** user32 für WS_EX_TRANSPARENT (Klick-durchlässigkeit des OSD-Fensters). */
+    private interface User32Lib : Library {
+        fun GetWindowLongW(hwnd: Long, index: Int): Int
+        fun SetWindowLongW(hwnd: Long, index: Int, style: Int): Int
+    }
+
+    private fun showOsdOverlay(text: String, timeoutMs: Int, color: java.awt.Color) {
+        SwingUtilities.invokeLater {
+            runCatching {
+                PlayerLog.mark("OSD overlay '${text.take(20)}'")
+                val canvas = videoCanvas ?: return@runCatching
+                val win = ensureOsdWindow() ?: return@runCatching
+                val label = osdLabel ?: return@runCatching
+                label.text = "<html><div style='text-align:center'>${text.replace("\n", "<br>")}</div></html>"
+                label.foreground = color
+                val cs = canvas.size
+                val pref = label.preferredSize
+                val w = (pref.width + 36).coerceAtMost(cs.width - 24)
+                val h = pref.height + 18
+                val loc = runCatching { canvas.locationOnScreen }.getOrNull() ?: return@runCatching
+                win.setBounds(
+                    loc.x + (cs.width - w) / 2,
+                    loc.y + cs.height - h - 40,
+                    w, h
+                )
+                win.isVisible = true
+                makeClickThrough(win)
+                if (timeoutMs > 0) {
+                    osdHide?.stop()
+                    osdHide = Timer(timeoutMs) { win.isVisible = false }
+                        .apply { isRepeats = false; start() }
+                }
+                PlayerLog.done("OSD overlay")
+            }.onFailure { PlayerLog.log("OSD overlay FEHLER: ${it.javaClass.simpleName} ${it.message}") }
+        }
+    }
+
+    /** Einmalig das Overlay-Fenster erzeugen (Owner = Fenster des Canvas,
+     *  damit es im Z-Stack ueber dem Video bleibt). */
+    private fun ensureOsdWindow(): JWindow? {
+        if (osdWin != null) return osdWin
+        var owner: java.awt.Container? = videoCanvas?.parent
+        while (owner?.parent != null) owner = owner.parent
+        if (owner !is java.awt.Window) return null
+        val w = JWindow(owner)
+        val label = JLabel()
+        label.foreground = java.awt.Color.WHITE
+        label.background = java.awt.Color(0f, 0f, 0f, 0.72f)
+        label.isOpaque = true
+        label.border = BorderFactory.createEmptyBorder(8, 16, 8, 16)
+        label.horizontalAlignment = SwingConstants.CENTER
+        label.font = label.font.deriveFont(java.awt.Font.BOLD, 16f)
+        w.contentPane.add(label)
+        w.setFocusableWindowState(false)
+        w.isVisible = false
+        osdWin = w
+        osdLabel = label
+        return w
+    }
+
+    /** WS_EX_TRANSPARENT setzen: Maus-Klicks gehen DURCH das OSD hindurch. */
+    private fun makeClickThrough(w: JWindow) {
+        runCatching {
+            val hwnd = Native.getComponentID(w)
+            if (hwnd == 0L) return
+            val u32 = Native.load("user32", User32Lib::class.java)
+            val style = u32.GetWindowLongW(hwnd, -20) // GWL_EXSTYLE
+            u32.SetWindowLongW(hwnd, -20, style or 0x20) // WS_EX_TRANSPARENT
+        }
+    }
+
+    /** Senderlogo als VLC-Logo-Overlay (ins Videobild, links unten).
+     *  Windows 1.5.12: no-op — der Logo-Filter ist dieselbe Deadlock-Klasse
+     *  wie Marquee (VLC-Filter-Churn im D3D-Output). Kosmetik entfaellt dort. */
     fun setLogo(path: String?) {
+        if (isWindows) return
         val mp = mediaPlayer ?: return
         if (path == null || path.isBlank()) {
             mp.logo().enable(false)
@@ -400,6 +491,7 @@ class VlcPlayer : VodPlayerApi {
 
     /** Logo ein-/ausblenden (zusammen mit dem OSD). */
     fun showLogo(v: Boolean) {
+        if (isWindows) return
         runCatching { mediaPlayer?.logo()?.enable(v) }
     }
 
@@ -409,6 +501,13 @@ class VlcPlayer : VodPlayerApi {
     }
 
     fun hideOsd() {
+        if (isWindows) {
+            SwingUtilities.invokeLater {
+                osdHide?.stop()
+                osdWin?.isVisible = false
+            }
+            return
+        }
         runCatching { mediaPlayer?.marquee()?.enable(false) }
     }
 
@@ -421,6 +520,12 @@ class VlcPlayer : VodPlayerApi {
         runCatching {
             mediaPlayer?.release()
             factory?.release()
+        }
+        if (isWindows) SwingUtilities.invokeLater {
+            osdHide?.stop()
+            osdWin?.dispose()
+            osdWin = null
+            osdLabel = null
         }
         PlayerLog.done("release")
         mediaPlayer = null
