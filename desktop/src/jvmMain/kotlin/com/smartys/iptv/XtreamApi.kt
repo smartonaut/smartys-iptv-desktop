@@ -52,6 +52,8 @@ data class LiveStream(
     var categoryName: String = ""
     /** Index des Providers, von dem dieser Kanal stammt (transient, nicht serialisiert). */
     var providerIndex: Int = 0
+    /** Direkte Stream-URL (Demo-Modus ohne Xtream). transient, nicht serialisiert. */
+    var directUrl: String? = null
     /** true, wenn dieser Kanal Timeshift/Replay unterstützt. */
     fun hasArchive(): Boolean = (tvArchive ?: 0) > 0
     /** Archiv-Dauer in Stunden (Fallback: 6h wenn unbekannt aber tv_archive gesetzt). */

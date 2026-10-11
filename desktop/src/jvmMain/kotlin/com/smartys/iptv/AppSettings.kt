@@ -82,6 +82,10 @@ object AppSettings {
 
     fun setDecodingMode(mode: String) = set("decoding_mode", mode)
 
+    fun cacheMode(): String = get("cache_mode", "none")
+
+    fun setCacheMode(mode: String) = set("cache_mode", mode)
+
     /**
      * Effektive libVLC-Argumente für den Decoding-Modus:
      *  - auto: keine (libVLC auto-detekt, wie die VLC-App)

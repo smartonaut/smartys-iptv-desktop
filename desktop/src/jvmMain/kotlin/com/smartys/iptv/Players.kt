@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.concurrent.thread
 import uk.co.caprica.vlcj.player.base.MarqueePosition
 import java.awt.Canvas
 import java.awt.KeyboardFocusManager
@@ -270,7 +272,7 @@ private fun RecordKeys(onStartRequest: () -> Unit, onStop: () -> Unit) {
 /** Startet eine Ad-hoc-Aufnahme des laufenden Kanals in eine dauerhafte Datei.
  *  Liefert false, wenn die Aufnahme nicht gestartet werden konnte (z. B. weil
  *  bereits eine andere Aufnahme läuft). */
-private fun startAdhocRecording(engine: RecordingEngine, vm: DesktopViewModel, ch: LiveStream, mode: AdhocRecMode): Boolean {
+fun startAdhocRecording(engine: RecordingEngine, vm: DesktopViewModel, ch: LiveStream, mode: AdhocRecMode): Boolean {
     val url = vm.streamUrlFor(ch) ?: return false
     val dir = File(AppSettings.recordingsDir())
     val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
@@ -346,9 +348,14 @@ private fun EdgeStrip(
 
 @Composable
 fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: () -> Unit) {
-    val player = remember { MpvPlayer() }
+    val player = remember { VlcPlayer() }
     val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
+    // Video-Output bereit? Erst dann den Canvas sichtbar schalten — das
+    // VLC-Child-Fenster mappt vorher WEISS (blendender Screen bis Frame 1).
+    // Bis dahin läuft der Canvas unsichtbar (1px) und der Compose-
+    // Lade-Indikator bleibt stehen.
+    var videoReady by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var volume by remember { mutableStateOf(100) }
     var brightness by remember { mutableStateOf(1.0f) }
@@ -432,7 +439,15 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     DisposableEffect(Unit) {
         onDispose {
             recEngine.stop()
-            player.release()
+            // Sauberer libVLC-Stop VOR release: sonst hält der Provider die
+            // Session noch offen (Max-Connections) und der nächste Kanal
+            // bekommt HTTP 407 → weißer Screen. release() leicht verzögert,
+            // damit der TEARDOWN den Server noch erreicht.
+            player.stop()
+            thread {
+                Thread.sleep(500)
+                player.release()
+            }
             FullscreenController.exit()
         }
     }
@@ -448,7 +463,17 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                         onVolumeUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) },
                         onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) }
                     )
-                    val start = { if (player.init()) player.play(url, isVod = false, timeshift = timeshift, timeshiftDir = timeshiftDir) }
+                    val start = {
+                        if (player.init()) {
+                            // vlcj setzt den Canvas-Hintergrund beim Binden evtl. auf weiß —
+                            // schwarz halten, bis der erste Frame kommt.
+                            canvas.background = java.awt.Color.BLACK
+                            // Canvas erst sichtbar, wenn VLC den Video-Output hat
+                            // (weißer Blitz des Child-Fensters wird so verhindert).
+                            player.onVideoOutput = { videoReady = true }
+                            player.play(url, isVod = false, timeshift = timeshift, timeshiftDir = timeshiftDir)
+                        }
+                    }
                     if (canvas.isDisplayable) {
                         inited = true
                         start()
@@ -463,8 +488,20 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 }
                 canvas
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = if (videoReady) Modifier.fillMaxSize() else Modifier.size(1.dp)
         )
+
+        // Lade-Indikator: bleibt stehen, bis der Video-Output wirklich da ist —
+        // kein weißer Blitz beim Stream-Start, dunkler Screen statt Blendung.
+        if (!videoReady) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Accent)
+                    Spacer(Modifier.height(14.dp))
+                    Text("Verbinde…", color = TextHi, fontSize = 15.sp)
+                }
+            }
+        }
 
         // Overlay-Kopfleiste
         Row(
@@ -553,7 +590,12 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         onDispose {
             ResumeStore.save(vp.key, player.currentPositionMs(), player.durationMs())
             watcher?.stop()
-            player.release()
+            // Sauberer libVLC-Stop VOR release (sonst 407 beim nächsten Titel).
+            player.stop()
+            thread {
+                Thread.sleep(500)
+                player.release()
+            }
             FullscreenController.exit()
         }
     }
@@ -609,6 +651,17 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             },
             modifier = Modifier.fillMaxSize()
         )
+
+        // Lade-Indikator: überdeckt den leeren Bereich, bis mpv rendert.
+        if (!inited) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator(color = Accent)
+                    Spacer(Modifier.height(14.dp))
+                    Text("Lade…", color = TextHi, fontSize = 15.sp)
+                }
+            }
+        }
 
         // Kopfleiste
         Row(

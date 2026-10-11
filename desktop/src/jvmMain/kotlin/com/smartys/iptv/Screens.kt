@@ -58,7 +58,7 @@ fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRad
 // ---------- Live-TV ----------
 
 @Composable
-fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit, onMultiView: () -> Unit = {}) {
+fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit, onStop: () -> Unit = {}, floatingChannel: LiveStream? = null, onMultiView: () -> Unit = {}) {
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var favMode by remember { mutableStateOf(false) }
     var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode()) }
@@ -144,6 +144,23 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                 }
             }
 
+            // Laufender mpv-Kanal (separates Fenster) — Stopp-Button
+            floatingChannel?.let { fc ->
+                Row(
+                    Modifier.fillMaxWidth().background(Color(0x22FFC94D)).padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("▶ ${fc.name} läuft im Player-Fenster", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.weight(1f))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp), color = Card,
+                        modifier = Modifier.clickable { onStop() }
+                    ) {
+                        Text("■ Stopp", color = TextHi, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                }
+            }
+
             LazyColumn(Modifier.weight(1f).padding(horizontal = 16.dp)) {
                 items(applied, key = { it.streamId }) { ch ->
                     ChannelRow(ch, vm, isFav = ch.streamId in vm.favorites,
@@ -191,6 +208,9 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
 private fun ChannelRow(ch: LiveStream, vm: DesktopViewModel, isFav: Boolean, onToggleFav: () -> Unit, onPlay: () -> Unit, onLongPress: () -> Unit) {
     val epg = vm.epgCache[ch.streamId]
     LaunchedEffect(ch.streamId) { vm.epgFor(ch) }
+    // EPG-Ready beobachten: damit Now/Next sofort erscheint, sobald XMLTV/Fallback geladen sind.
+    vm.xmltvReady.value
+    vm.fallbackReady.value
 
     Row(
         Modifier.fillMaxWidth().combinedClickable(onClick = onPlay, onLongClick = onLongPress)

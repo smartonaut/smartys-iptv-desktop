@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import javax.swing.SwingUtilities
 import kotlinx.coroutines.launch
 
 // ---------- Farben (identisch zur Android-App) ----------
@@ -59,6 +60,25 @@ fun App() {
     var vodPlaying by remember { mutableStateOf<VodPlaying?>(null) }
     var showSeries by remember { mutableStateOf<SeriesStream?>(null) }
     var selectedMovie by remember { mutableStateOf<VodStream?>(null) }
+
+    // Weißes Fenster nach Screen-Wechsel (Player ↔ Menü) verhindern:
+    // Compose Desktop hat einen bekannten Bug, bei dem das Fenster nach dem
+    // Ein-/Aushängen eines SwingPanel (heavyweight Video-Canvas) unbemalt
+    // bleibt. Nach jedem Player-Wechsel das AWT-Fenster zum Neuzeichnen
+    // zwingen — sofort und nochmal nach ~150ms (falls der Wechsel noch in
+    // der Layout-Phase steckte).
+    LaunchedEffect(liveChannel, vodPlaying, multiView) {
+        kotlinx.coroutines.delay(50)
+        SwingUtilities.invokeLater {
+            FullscreenController.window?.invalidate()
+            FullscreenController.window?.repaint()
+        }
+        kotlinx.coroutines.delay(150)
+        SwingUtilities.invokeLater {
+            FullscreenController.window?.invalidate()
+            FullscreenController.window?.repaint()
+        }
+    }
 
     MaterialTheme(colorScheme = darkColorScheme(
         primary = Accent, background = Bg, surface = Card,

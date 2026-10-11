@@ -40,9 +40,10 @@ interface MpvLib : Library {
          */
         private fun ensureLibMpv(): File? = runCatching {
             val home = File(System.getProperty("user.home"), ".smartys-iptv/libmpv")
-            val marker = File(home, "lib/libmpv.so")
+            val marker = if (isWindows) File(home, "libmpv-2.dll") else File(home, "lib/libmpv.so")
             if (!marker.exists()) {
-                val zipRes = MpvLib::class.java.getResourceAsStream("/libmpv/libmpv-linux-x64.zip")
+                val resPath = if (isWindows) "/libmpv/libmpv-windows-x64.zip" else "/libmpv/libmpv-linux-x64.zip"
+                val zipRes = MpvLib::class.java.getResourceAsStream(resPath)
                     ?: return@runCatching null
                 home.mkdirs()
                 ZipInputStream(zipRes).use { zis ->
@@ -60,17 +61,13 @@ interface MpvLib : Library {
                     }
                 }
             }
-            File(home, "lib")
+            if (isWindows) home else File(home, "lib")
         }.getOrNull()
 
         val INSTANCE: MpvLib by lazy {
-            if (!isWindows) {
-                ensureLibMpv()?.let { NativeLibrary.addSearchPath("mpv", it.absolutePath) }
-            }
-            Native.load(
-                if (isWindows) "mpv-2" else "mpv",
-                MpvLib::class.java
-            )
+            val libName = if (isWindows) "mpv-2" else "mpv"
+            ensureLibMpv()?.let { NativeLibrary.addSearchPath(libName, it.absolutePath) }
+            Native.load(libName, MpvLib::class.java)
         }
     }
 }
@@ -91,6 +88,7 @@ class MpvEvent(ptr: Pointer? = null) : Structure(ptr) {
         const val EVENT_PLAYBACK_RESTART = 21
         const val EVENT_PROPERTY_CHANGE = 22
         const val EVENT_QUEUE_OVERFLOW = 24
+        const val EVENT_CLOSE_WIN = 26
     }
 }
 

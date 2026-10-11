@@ -39,6 +39,11 @@ class VlcPlayer {
     /** Wird beim natürlichen Ende eines VOD-Titels aufgerufen. */
     var onVodEnded: (() -> Unit)? = null
 
+    /** Feuert, sobald libVLC den Video-Output erstellt (kurz vor Frame 1).
+     *  Wird genutzt, um den Canvas erst dann sichtbar zu schalten — das
+     *  VLC-Child-Fenster mappt sonst WEISS und blendet bis zum ersten Frame. */
+    var onVideoOutput: (() -> Unit)? = null
+
     private var currentUrl: String? = null
     private var currentIsVod = false
 
@@ -184,7 +189,15 @@ class VlcPlayer {
                 if (pluginDir.exists()) setenv("VLC_PLUGIN_PATH", pluginDir.absolutePath)
             }
 
-            val factoryArgs = mutableListOf("--no-video-title-show", "--network-caching=1500")
+            val factoryArgs = mutableListOf(
+                "--no-video-title-show",
+                "--network-caching=1500",
+                // Browser-User-Agent: viele Xtream-Panels blocken Requests ohne
+                // Browser-UA (407) — ohne UA wartet VLC lange bzw. der Kanal
+                // kommt gar nicht. Gleicher UA wie Box/exteplayer3.
+                "--http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
+            )
             factoryArgs.addAll(AppSettings.hwDecodingArgs())
             val f = MediaPlayerFactory(factoryArgs)
             val mp = f.mediaPlayers().newEmbeddedMediaPlayer()
@@ -212,6 +225,9 @@ class VlcPlayer {
                 }
                 override fun stopped(mediaPlayer: MediaPlayer) {
                     playing = false
+                }
+                override fun videoOutput(mediaPlayer: MediaPlayer, newCount: Int) {
+                    onVideoOutput?.invoke()
                 }
             })
             factory = f
