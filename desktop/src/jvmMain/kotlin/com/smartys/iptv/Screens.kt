@@ -58,7 +58,7 @@ fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRad
 // ---------- Live-TV ----------
 
 @Composable
-fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit) {
+fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit, onMultiView: () -> Unit = {}) {
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var favMode by remember { mutableStateOf(false) }
     var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode()) }
@@ -133,6 +133,14 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                     }
                 ) {
                     Text(label, color = Accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                }
+                Spacer(Modifier.width(8.dp))
+                // Multi-View: bis zu 4 Kanäle gleichzeitig (Sport)
+                Surface(
+                    shape = RoundedCornerShape(8.dp), color = Card,
+                    modifier = Modifier.clickable { onMultiView() }
+                ) {
+                    Text("▦ Multi-View", color = Accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                 }
             }
 

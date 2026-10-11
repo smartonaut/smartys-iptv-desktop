@@ -55,6 +55,7 @@ fun App() {
 
     var tab by remember { mutableStateOf(Tab.LIVE) }
     var liveChannel by remember { mutableStateOf<LiveStream?>(null) }
+    var multiView by remember { mutableStateOf(false) }
     var vodPlaying by remember { mutableStateOf<VodPlaying?>(null) }
     var showSeries by remember { mutableStateOf<SeriesStream?>(null) }
     var selectedMovie by remember { mutableStateOf<VodStream?>(null) }
@@ -80,7 +81,7 @@ fun App() {
                         TabBar(tab) { tab = it }
                         Box(Modifier.weight(1f)) {
                             when (tab) {
-                                Tab.LIVE -> LiveTvScreen(vm, s, onPlay = { liveChannel = it })
+                                Tab.LIVE -> LiveTvScreen(vm, s, onPlay = { liveChannel = it }, onMultiView = { multiView = true })
                                 Tab.MOVIES -> MoviesScreen(vm,
                                     onOpenSeries = { showSeries = it },
                                     onOpenMovie = { selectedMovie = it })
@@ -145,6 +146,11 @@ fun App() {
                         } else {
                             liveChannel = null
                         }
+                    }
+
+                    // Multi-View (Overlay, bis zu 4 Kanäle gleichzeitig)
+                    if (multiView) {
+                        MultiViewScreen(s.channels, vm, onBack = { multiView = false })
                     }
 
                     // VOD-Player (Overlay, inkl. Auto-Advance bei Serien).
