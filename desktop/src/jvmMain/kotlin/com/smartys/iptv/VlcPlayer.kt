@@ -231,6 +231,13 @@ class VlcPlayer : VodPlayerApi {
                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
             )
             factoryArgs.addAll(AppSettings.hwDecodingArgs())
+            // 1.5.14 Windows: VLCs Video-Output baut ein eigenes Kind-Fenster in die
+            // Canvas und verschluckt Maus-KLICKS fuer seine eigene Fenster-Prozedur
+            // (Maus-BEWEGUNG laesst er durch — Beweis app.log 1.5.13: mouseMoved kam
+            // an, mouseClicked nie). --no-mouse-events stellt VLC ab: Klicks und
+            // Mausrad erreichen wieder den AWT-Canvas. Nur Windows: auf Linux
+            // kommen die Klicks bereits an (Plattform-Regel: nichts anfassen, was geht).
+            if (isWindows) factoryArgs.add("--no-mouse-events")
             val f = MediaPlayerFactory(factoryArgs)
             val mp = f.mediaPlayers().newEmbeddedMediaPlayer()
             val surface = f.videoSurfaces().newVideoSurface(videoCanvas)
