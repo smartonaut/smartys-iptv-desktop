@@ -266,6 +266,13 @@ class VlcPlayer : VodPlayerApi {
                     playing = false
                 }
                 override fun videoOutput(mediaPlayer: MediaPlayer, newCount: Int) {
+                    // 1.5.16 Windows: VLC legt seine zwei Kindfenster
+                    // ('VLC video main' + 'VLC video output') an und FRISST alle
+                    // Maus-KLICKS (Beweis: EnumChildWindows-Dump; app.log 1.5.13-15
+                    // zeigt mouseMoved kam an, mouseClicked NIEMALS). Hier und per
+                    // Retry-Timer WS_EX_TRANSPARENT darauf setzen -> Klicks und
+                    // Mausrad erreichen wieder die AWT-Canvas.
+                    if (isWindows) scheduleVlcClickThrough()
                     onVideoOutput?.invoke()
                 }
             })
@@ -408,10 +415,16 @@ class VlcPlayer : VodPlayerApi {
     private var osdLabel: JLabel? = null
     private var osdHide: Timer? = null
 
-    /** user32 für WS_EX_TRANSPARENT (Klick-durchlässigkeit des OSD-Fensters). */
+    /** user32 für WS_EX_TRANSPARENT (OSD + VLC-Video-Kindfenster). */
     private interface User32Lib : Library {
         fun GetWindowLongW(hwnd: Long, index: Int): Int
         fun SetWindowLongW(hwnd: Long, index: Int, style: Int): Int
+        fun EnumChildWindows(parent: Long, cb: WndEnumProc, lParam: Long): Boolean
+        fun GetClassNameW(hwnd: Long, buf: CharArray, max: Int): Int
+    }
+
+    private interface WndEnumProc : com.sun.jna.Callback {
+        fun callback(hwnd: Long, lParam: Long): Boolean
     }
 
     private fun showOsdOverlay(text: String, timeoutMs: Int, color: java.awt.Color) {
@@ -466,6 +479,65 @@ class VlcPlayer : VodPlayerApi {
         osdWin = w
         osdLabel = label
         return w
+    }
+
+    // 1.5.16: VLC-Video-Kindfenster klick-durchlaessig machen.
+    // VLC baut die Fenster erst Millisekunden nach dem videoOutput-Event ->
+    // Retry-Timer, bis beide Fenster gefunden wurden (oder aufgeben nach 5s).
+    private var vlcCtTimer: Timer? = null
+    private var vlcCtAttempts = 0
+
+    private fun scheduleVlcClickThrough() {
+        vlcCtAttempts = 0
+        vlcCtTimer?.stop()
+        vlcCtTimer = Timer(600) {
+            vlcCtAttempts++
+            val applied = applyVlcClickThrough()
+            if (applied >= 2 || vlcCtAttempts >= 8) {
+                vlcCtTimer?.stop()
+                PlayerLog.log("VLC click-through fertig: $applied Fenster, Versuch $vlcCtAttempts")
+            }
+        }.apply { isRepeats = true; initialDelay = 300; start() }
+    }
+
+    /** Alle 'VLC video*'-Kindfenster unter dem Top-Level-Fenster finden und
+     *  WS_EX_TRANSPARENT setzen. Rueckgabe: Anzahl behandelter Fenster. */
+    private fun applyVlcClickThrough(): Int {
+        return runCatching {
+            val canvas = videoCanvas ?: return 0
+            val top = Native.getComponentID(canvas)
+            if (top == 0L) return 0
+            // Kindfenster haengen am Fenster-Baum der App -> vom Top-Level-Window
+            // des Canvas ausgehen (nicht nur von der Canvas selbst).
+            var root: java.awt.Container? = canvas.parent
+            while (root?.parent != null) root = root.parent
+            val hwndRoot = if (root is java.awt.Window) Native.getComponentID(root) else top
+            if (hwndRoot == 0L) return 0
+            val u32 = Native.load("user32", User32Lib::class.java)
+            val applied = intArrayOf(0)
+            val proc = object : WndEnumProc {
+                override fun callback(hwnd: Long, lParam: Long): Boolean {
+                    val buf = CharArray(64)
+                    val n = u32.GetClassNameW(hwnd, buf, 64)
+                    val cls = if (n > 0) String(buf, 0, n) else ""
+                    if (cls.startsWith("VLC video")) {
+                        val ex = u32.GetWindowLongW(hwnd, -20) // GWL_EXSTYLE
+                        if (ex and 0x20 == 0) { // WS_EX_TRANSPARENT noch nicht gesetzt
+                            u32.SetWindowLongW(hwnd, -20, ex or 0x20)
+                            PlayerLog.log("WS_EX_TRANSPARENT gesetzt auf '$cls' (hwnd=$hwnd)")
+                            applied[0]++
+                        }
+                    }
+                    return true
+                }
+            }
+            u32.EnumChildWindows(hwndRoot, proc, 0)
+            // auch den Canvas-Teilbaum abdecken (falls VLC dort einhaengt)
+            if (hwndRoot != top) u32.EnumChildWindows(top, proc, 0)
+            applied[0]
+        }.onFailure {
+            PlayerLog.log("VLC click-through FEHLER: ${it.javaClass.simpleName} ${it.message}")
+        }.getOrDefault(0)
     }
 
     /** WS_EX_TRANSPARENT setzen: Maus-Klicks gehen DURCH das OSD hindurch. */
