@@ -476,6 +476,8 @@ class VlcPlayer : VodPlayerApi {
         label.font = label.font.deriveFont(java.awt.Font.BOLD, 16f)
         w.contentPane.add(label)
         w.setFocusableWindowState(false)
+        // 1.5.18: nie Fokus klauen — sonst bricht AWT-Vollbild sofort ab
+        w.setAutoRequestFocus(false)
         w.isVisible = false
         osdWin = w
         osdLabel = label

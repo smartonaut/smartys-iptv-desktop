@@ -172,6 +172,13 @@ object FullscreenController {
         panel.add(close)
         jw.contentPane.add(panel)
         jw.pack()
+        // 1.5.18: Fokus-Schutz! Das Fenster erscheint direkt nach dem Vollbild-
+        // Eintritt. Ohne autoRequestFocus=false klaut es den Fenster-Fokus —
+        // und AWT-exklusives Vollbild bricht bei JEDEM Fokusverlust ab
+        // (User-Beweis: VOD-Vollbild 'laeuft nicht richtig', Live hielt nur,
+        // solange keine anderen Fenster aufgingen).
+        jw.setFocusableWindowState(false)
+        jw.setAutoRequestFocus(false)
 
         val bounds = gd.defaultConfiguration.bounds
         jw.setLocation(bounds.x + bounds.width - jw.width - 12, bounds.y + 12)
