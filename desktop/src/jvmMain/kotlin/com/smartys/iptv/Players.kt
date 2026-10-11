@@ -39,6 +39,10 @@ import java.util.Date
 import java.util.Locale
 import javax.swing.SwingUtilities
 
+/** Ziel-OS = Windows? Bestimmt die VOD-Engine: Windows = mpv, Linux = VLC. */
+internal val isWindowsOS: Boolean =
+    System.getProperty("os.name").lowercase().contains("win")
+
 enum class AdhocRecMode { CURRENT_SHOW, ENDLESS }
 
 // ---------- Gemeinsame Player-Gesten ----------
@@ -234,7 +238,7 @@ private fun attachMouseControls(
 
 /** Pfeiltasten bei VOD: Links = -10s, Rechts = +10s (an die Länge geklemmt). */
 @Composable
-private fun ArrowSeek(player: MpvPlayer) {
+private fun ArrowSeek(player: VodPlayerApi) {
     val dispatcher = remember(player) {
         object : KeyEventDispatcher {
             override fun dispatchKeyEvent(e: KeyEvent): Boolean {
@@ -463,7 +467,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             if (u != null) {
                 tsServerActive = true
                 player.stop()
-                player.play(u)
+                player.play(u, isVod = false, timeshift = false, timeshiftDir = null)
                 player.pause()
                 paused = true
                 player.showOsd("⏸ Pause — zurück mit ◀", 2000)
@@ -691,9 +695,15 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
 
 @Composable
 fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
-    val player = remember { MpvPlayer() }
+    // Plattform-Trennung: Windows = mpv, Linux = VLC (wie Live-TV).
+    val player = remember { if (isWindowsOS) MpvPlayer() else VlcPlayer() }
     val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
+    // Weiß-Screen-Fix (wie Live-TV): das VLC-Child-Fenster mappt WEISS bis
+    // Frame 1 — der Canvas bleibt deshalb 1px klein und der Lade-Indikator
+    // sichtbar, bis onVideoOutput feuert. mpv (Windows) rendert ohne Weiß-
+    // Flash — dort kippt videoReady direkt nach init.
+    var videoReady by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
     var positionMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
@@ -754,6 +764,11 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                         if (!inited) {
                             inited = true
                             if (player.init()) {
+                                if (player is VlcPlayer) {
+                                    player.onVideoOutput = { videoReady = true }
+                                } else {
+                                    videoReady = true
+                                }
                                 val advance = {
                                     vm.markWatched(vp.streamId)
                                     vp.next?.invoke()
@@ -779,11 +794,11 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                 }
                 canvas
             },
-            modifier = Modifier.fillMaxSize()
+            modifier = if (videoReady) Modifier.fillMaxSize() else Modifier.size(1.dp)
         )
 
-        // Lade-Indikator: überdeckt den leeren Bereich, bis mpv rendert.
-        if (!inited) {
+        // Lade-Indikator: überdeckt den leeren Bereich, bis das Video rendert.
+        if (!videoReady) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Accent)

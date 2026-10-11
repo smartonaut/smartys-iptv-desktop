@@ -14,7 +14,7 @@ import javax.swing.SwingUtilities
  * Rendering: libmpv zeichnet in das native Window des AWT-Canvas (wid),
  * d.h. Hardware-Beschleunigung (VAAPI/VDPAU/DXVA) bleibt erhalten.
  */
-class MpvPlayer {
+class MpvPlayer : VodPlayerApi {
 
     private var handle: com.sun.jna.Pointer? = null
     private var eventThread: Thread? = null
@@ -27,10 +27,10 @@ class MpvPlayer {
         private set
 
     /** Video-Ziel (muss vor play() gesetzt sein, damit das Bild dort erscheint). */
-    var videoCanvas: Canvas? = null
+    override var videoCanvas: Canvas? = null
 
     /** Wird beim natürlichen Ende eines VOD-Titels aufgerufen. */
-    var onVodEnded: (() -> Unit)? = null
+    override var onVodEnded: (() -> Unit)? = null
     var onClosed: (() -> Unit)? = null
     var onChannelStep: ((Int) -> Unit)? = null
 
@@ -41,7 +41,7 @@ class MpvPlayer {
      * Initialisiert libmpv (einmal pro Player). Muss auf dem EDT laufen,
      * da der Canvas dort lebt und sein natives Fenster sichtbar sein muss.
      */
-    fun init(): Boolean {
+    override fun init(): Boolean {
         if (handle != null) return true
         return runCatching {
             val ctx = MpvLib.INSTANCE.mpv_create()
@@ -219,7 +219,7 @@ class MpvPlayer {
     }
 
     /** Stream/MRL abspielen. isVod = true verhindert Reconnect und feuert onVodEnded. */
-    fun play(url: String, isVod: Boolean = false, timeshift: Boolean = false, timeshiftDir: String? = null) {
+    override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?) {
         val ctx = handle ?: return
         currentUrl = url
         currentIsVod = isVod
@@ -234,15 +234,15 @@ class MpvPlayer {
         }
     }
 
-    fun pause() {
+    override fun pause() {
         handle?.let { MpvLib.INSTANCE.mpv_set_property_string(it, "pause", "yes") }
     }
 
-    fun resume() {
+    override fun resume() {
         handle?.let { MpvLib.INSTANCE.mpv_set_property_string(it, "pause", "no") }
     }
 
-    fun stop() {
+    override fun stop() {
         currentUrl = null
         handle?.let { MpvLib.INSTANCE.mpv_command(it, arrayOf("stop")) }
         playing = false
@@ -252,20 +252,20 @@ class MpvPlayer {
         handle?.let { MpvLib.INSTANCE.mpv_set_property_string(it, "window-minimized", "yes") }
     }
 
-    fun seekTo(posMs: Long) {
+    override fun seekTo(posMs: Long) {
         handle?.let {
             MpvLib.INSTANCE.mpv_command(it, arrayOf("seek", (posMs / 1000.0).toString(), "absolute"))
         }
     }
 
-    fun currentPositionMs(): Long =
+    override fun currentPositionMs(): Long =
         (getDouble("time-pos") * 1000.0).toLong()
 
-    fun durationMs(): Long =
+    override fun durationMs(): Long =
         (getDouble("duration") * 1000.0).toLong()
 
     /** Lautstärke (0–200, 100 = normal). libmpv erwartet 0–100. */
-    fun setVolume(v: Int) {
+    override fun setVolume(v: Int) {
         handle?.let { MpvLib.INSTANCE.mpv_set_property_string(it, "volume", (v / 2).toString()) }
     }
 
@@ -278,7 +278,7 @@ class MpvPlayer {
     }
 
     /** Helligkeit (0.0–2.0, 1.0 = neutral). libmpv: -100..100, 0 = neutral. */
-    fun setBrightness(b: Float) {
+    override fun setBrightness(b: Float) {
         handle?.let {
             MpvLib.INSTANCE.mpv_set_property_string(it, "brightness", ((b - 1.0f) * 100).toInt().toString())
         }
@@ -305,7 +305,7 @@ class MpvPlayer {
     }
 
     /** Screenshot für die Abspann-Erkennung (CreditsWatcher). */
-    fun snapshot(): java.awt.image.BufferedImage? {
+    override fun snapshot(): java.awt.image.BufferedImage? {
         val ctx = handle ?: return null
         val path = System.getProperty("java.io.tmpdir") + "/smartys_snapshot.png"
         return runCatching {
@@ -320,7 +320,7 @@ class MpvPlayer {
         }.getOrNull()
     }
 
-    fun release() {
+    override fun release() {
         running = false
         runCatching {
             handle?.let { MpvLib.INSTANCE.mpv_terminate_destroy(it) }

@@ -1,0 +1,34 @@
+package com.smartys.iptv
+
+import java.awt.Canvas
+import java.awt.image.BufferedImage
+
+/**
+ * Gemeinsame Wiedergabe-API für den VOD-Player.
+ *
+ * Plattform-Trennung (User-Direktive: Windows und Linux sind grundverschiedene
+ * Systeme): Windows nutzt MpvPlayer (rendert zuverlässig in den Canvas), Linux
+ * nutzt VlcPlayer — gleiche Engine wie Live-TV (schnellster Start, identischer
+ * UA-/Decoding-Pfad, kein Weiß-Flash dank videoOutput-Event). Der Screen selbst
+ * ist identisch und arbeitet nur gegen dieses Interface.
+ */
+interface VodPlayerApi {
+    /** Video-Ziel (muss vor init()/play() gesetzt sein). */
+    var videoCanvas: Canvas?
+
+    /** Wird beim natürlichen Ende eines VOD-Titels aufgerufen. */
+    var onVodEnded: (() -> Unit)?
+
+    fun init(): Boolean
+    fun play(url: String, isVod: Boolean = false, timeshift: Boolean = false, timeshiftDir: String? = null)
+    fun pause()
+    fun resume()
+    fun stop()
+    fun release()
+    fun seekTo(posMs: Long)
+    fun currentPositionMs(): Long
+    fun durationMs(): Long
+    fun setVolume(v: Int)
+    fun setBrightness(b: Float)
+    fun snapshot(): BufferedImage?
+}

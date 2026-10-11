@@ -24,7 +24,7 @@ import javax.swing.SwingUtilities
  * nötig. Falls der gebündelte Build nicht zum System passt, fällt der Loader
  * auf ein systemweit installiertes libVLC zurück.
  */
-class VlcPlayer {
+class VlcPlayer : VodPlayerApi {
 
     private var factory: MediaPlayerFactory? = null
     private var mediaPlayer: EmbeddedMediaPlayer? = null
@@ -34,10 +34,10 @@ class VlcPlayer {
         private set
 
     /** Video-Ziel (muss vor play() gesetzt sein, damit das Bild dort erscheint). */
-    var videoCanvas: Canvas? = null
+    override var videoCanvas: Canvas? = null
 
     /** Wird beim natürlichen Ende eines VOD-Titels aufgerufen. */
-    var onVodEnded: (() -> Unit)? = null
+    override var onVodEnded: (() -> Unit)? = null
 
     /** Feuert, sobald libVLC den Video-Output erstellt (kurz vor Frame 1).
      *  Wird genutzt, um den Canvas erst dann sichtbar zu schalten — das
@@ -162,7 +162,7 @@ class VlcPlayer {
      * sieht), dann libvlc via JNA-Suchpfad. Unter Windows heißt die JNA-Library
      * "libvlc" (→ libvlc.dll), unter Linux "vlc" (→ libvlc.so).
      */
-    fun init(): Boolean {
+    override fun init(): Boolean {
         if (mediaPlayer != null) return true
         return runCatching {
             // Auf Linux bevorzugen wir das System-libVLC (korrekt für das System
@@ -259,7 +259,7 @@ class VlcPlayer {
     /** Stream/MRL abspielen. isVod = true verhindert Reconnect und feuert onVodEnded.
      *  timeshift = true puffert den Stream auf die Platte (libVLC input-timeshift),
      *  sodass Pause + Zurückspulen am Live-Kanal möglich sind. */
-    fun play(url: String, isVod: Boolean = false, timeshift: Boolean = false, timeshiftDir: String? = null) {
+    override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?) {
         val mp = mediaPlayer ?: return
         currentUrl = url
         currentIsVod = isVod
@@ -274,32 +274,32 @@ class VlcPlayer {
         }
     }
 
-    fun pause() {
+    override fun pause() {
         mediaPlayer?.controls()?.setPause(true)
     }
 
-    fun resume() {
+    override fun resume() {
         mediaPlayer?.controls()?.setPause(false)
     }
 
-    fun stop() {
+    override fun stop() {
         currentUrl = null
         mediaPlayer?.controls()?.stop()
         playing = false
     }
 
-    fun seekTo(posMs: Long) {
+    override fun seekTo(posMs: Long) {
         mediaPlayer?.controls()?.setTime(posMs)
     }
 
-    fun currentPositionMs(): Long =
+    override fun currentPositionMs(): Long =
         mediaPlayer?.status()?.time() ?: 0L
 
-    fun durationMs(): Long =
+    override fun durationMs(): Long =
         mediaPlayer?.status()?.length() ?: 0L
 
     /** Lautstärke (0–200, 100 = normal). */
-    fun setVolume(v: Int) {
+    override fun setVolume(v: Int) {
         mediaPlayer?.audio()?.setVolume(v)
     }
 
@@ -307,7 +307,7 @@ class VlcPlayer {
         mediaPlayer?.audio()?.volume() ?: 100
 
     /** Helligkeit (0.0–2.0, 1.0 = neutral). */
-    fun setBrightness(b: Float) {
+    override fun setBrightness(b: Float) {
         mediaPlayer?.video()?.setBrightness(b)
     }
 
@@ -364,10 +364,10 @@ class VlcPlayer {
     }
 
     /** Frame-Grab für die Abspann-Erkennung (Downsample 48×27). */
-    fun snapshot(): java.awt.image.BufferedImage? =
+    override fun snapshot(): java.awt.image.BufferedImage? =
         runCatching { mediaPlayer?.snapshots()?.get(48, 27) }.getOrNull()
 
-    fun release() {
+    override fun release() {
         runCatching {
             mediaPlayer?.release()
             factory?.release()
