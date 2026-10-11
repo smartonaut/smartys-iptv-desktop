@@ -10,7 +10,7 @@ export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
 echo "==> Kompiliere + baue .deb ..."
 gradle :desktop:packageDeb --console=plain
 
-DEB=desktop/build/compose/binaries/main/deb/smartysiptv_1.5.0-1_amd64.deb
+DEB=$(ls -1t desktop/build/compose/binaries/main/deb/smartysiptv_*-1_amd64.deb 2>/dev/null | head -1)
 if [[ ! -f "$DEB" ]]; then
     echo "FEHLER: $DEB nicht gefunden" >&2
     exit 1
