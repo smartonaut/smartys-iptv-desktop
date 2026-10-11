@@ -65,7 +65,9 @@ interface MpvLib : Library {
         }.getOrNull()
 
         val INSTANCE: MpvLib by lazy {
-            val libName = if (isWindows) "mpv-2" else "mpv"
+            // Windows: shinchiro-Build liefert die DLL als "libmpv-2.dll"
+            // (ffmpeg statisch gelinkt, kein extra DLL-Satz nötig).
+            val libName = if (isWindows) "libmpv-2" else "mpv"
             ensureLibMpv()?.let { NativeLibrary.addSearchPath(libName, it.absolutePath) }
             Native.load(libName, MpvLib::class.java)
         }
