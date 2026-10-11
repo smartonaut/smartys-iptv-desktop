@@ -219,6 +219,15 @@ private fun attachMouseControls(
         })
     }
     canvas.addMouseListener(object : MouseAdapter() {
+        // 1.5.15 Diagnose: CLICKED erzeugt AWT nur bei sauberem PRESSED+RELEASED
+        // auf demselben Component. Alle Teilereignisse einzeln loggen, sonst
+        // sieht man nicht, WELCHER Teil der Klick-Kette unter Windows fehlt.
+        override fun mousePressed(e: MouseEvent) {
+            PlayerLog.log("mousePressed btn=${e.button} count=${e.clickCount} x=${e.x} y=${e.y}")
+        }
+        override fun mouseReleased(e: MouseEvent) {
+            PlayerLog.log("mouseReleased btn=${e.button} count=${e.clickCount} x=${e.x} y=${e.y}")
+        }
         override fun mouseClicked(e: MouseEvent) {
             PlayerLog.mark("mouseClicked btn=${e.button} count=${e.clickCount}")
             if (e.button != MouseEvent.BUTTON1) return
