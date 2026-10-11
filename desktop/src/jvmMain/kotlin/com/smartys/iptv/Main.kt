@@ -35,7 +35,7 @@ val Danger = Color(0xFFFF6B6B)
 // ---------- Navigation ----------
 
 enum class Tab(val label: String) {
-    LIVE("Live-TV"), MOVIES("Filme"), SERIES("Serien"), DOWNLOADS("Downloads"), RECORDINGS("Aufnahmen"), SETTINGS("Einstellungen")
+    LIVE("Live-TV"), MOVIES("Filme"), SERIES("Serien"), SEARCH("Suche"), DOWNLOADS("Downloads"), RECORDINGS("Aufnahmen"), SETTINGS("Einstellungen")
 }
 
 data class VodPlaying(
@@ -106,6 +106,10 @@ fun App() {
                                     onOpenSeries = { showSeries = it },
                                     onOpenMovie = { selectedMovie = it })
                                 Tab.SERIES -> SeriesScreen(vm, onOpen = { showSeries = it })
+                                Tab.SEARCH -> SearchScreen(vm, s,
+                                    onPlayChannel = { liveChannel = it },
+                                    onOpenMovie = { selectedMovie = it },
+                                    onOpenSeries = { showSeries = it })
                                 Tab.DOWNLOADS -> DownloadsScreen(vm,
                                     onPlay = { file, title, id ->
                                         vodPlaying = VodPlaying(title, file.toURI().toString(), "vod:download:$id", id, null, false, null)
