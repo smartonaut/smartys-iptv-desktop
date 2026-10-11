@@ -83,16 +83,22 @@ object FullscreenController {
     private var controlsWindow: javax.swing.JWindow? = null
 
     fun toggle() {
-        val w = window ?: return
+        val w = window
+        if (w == null) { PlayerLog.log("toggle ABGEBROCHEN: window==null!"); return }
         SwingUtilities.invokeLater {
-            val gd = w.graphicsConfiguration?.device ?: return@invokeLater
-            if (gd.fullScreenWindow == null) {
-                gd.fullScreenWindow = w
-                showControls(gd)
-            } else {
-                gd.fullScreenWindow = null
-                hideControls()
-            }
+            val gd = w.graphicsConfiguration?.device
+            if (gd == null) { PlayerLog.log("toggle ABGEBROCHEN: kein GraphicsDevice!"); return@invokeLater }
+            PlayerLog.mark("toggle fullscreen (jetzt=${if (gd.fullScreenWindow == null) "aus->an" else "an->aus"})")
+            runCatching {
+                if (gd.fullScreenWindow == null) {
+                    gd.fullScreenWindow = w
+                    showControls(gd)
+                } else {
+                    gd.fullScreenWindow = null
+                    hideControls()
+                }
+            }.onFailure { PlayerLog.log("toggle FEHLER: ${it.javaClass.simpleName} ${it.message}") }
+            PlayerLog.done("toggle fullscreen")
         }
     }
 
@@ -206,21 +212,26 @@ private fun attachMouseControls(
                 val now = System.currentTimeMillis()
                 if (now - lastTs.get() < 150) return
                 lastTs.set(now)
+                PlayerLog.mark("mouseMoved (OSD)")
                 onMouseMove()
+                PlayerLog.done("mouseMoved")
             }
         })
     }
     canvas.addMouseListener(object : MouseAdapter() {
         override fun mouseClicked(e: MouseEvent) {
+            PlayerLog.mark("mouseClicked btn=${e.button} count=${e.clickCount}")
             if (e.button != MouseEvent.BUTTON1) return
             if (e.clickCount >= 2) {
                 clickTimer?.stop()
+                PlayerLog.log("Doppelklick -> Vollbild toggle")
                 SwingUtilities.invokeLater { FullscreenController.toggle() }
             } else {
                 // Einzelklick erst nach kurzer Verzögerung auslösen, um
                 // Doppelklick nicht fälschlich als "zurück" zu werten.
                 clickTimer?.stop()
                 clickTimer = javax.swing.Timer(250) {
+                    PlayerLog.log("Einzelklick-Timer feuert -> onBack")
                     SwingUtilities.invokeLater(onBack)
                 }.apply {
                     isRepeats = false
@@ -231,8 +242,10 @@ private fun attachMouseControls(
     })
     canvas.addMouseWheelListener { e ->
         val clicks = e.wheelRotation
+        PlayerLog.mark("wheel $clicks")
         if (clicks < 0) repeat(-clicks) { SwingUtilities.invokeLater(onVolumeUp) }
         else if (clicks > 0) repeat(clicks) { SwingUtilities.invokeLater(onVolumeDown) }
+        PlayerLog.done("wheel")
     }
 }
 
