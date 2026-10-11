@@ -22,21 +22,31 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // ---------- Poster-Helper (Coil 3, mit Fehler-/Lade-Fallback) ----------
 
 @Composable
-fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRadius: Int = 10) {
+fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRadius: Int = 10, tmdbId: String? = null) {
     val shape = RoundedCornerShape(cornerRadius.dp)
+    // TMDb-Poster-Fallback: kein eigenes Cover, aber tmdb-Id vorhanden -> nachladen.
+    var fallbackUrl by remember(tmdbId) { mutableStateOf<String?>(null) }
+    LaunchedEffect(tmdbId) {
+        if (url.isNullOrBlank() && !tmdbId.isNullOrBlank()) {
+            fallbackUrl = withContext(Dispatchers.IO) { TmdbMeta.posterUrl(tmdbId) }
+        }
+    }
+    val resolved = if (url.isNullOrBlank()) fallbackUrl else url
     Box(modifier.clip(shape).background(Card)) {
-        if (url.isNullOrBlank()) {
+        if (resolved.isNullOrBlank()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(title, color = TextMid, fontSize = 12.sp, textAlign = TextAlign.Center,
                     modifier = Modifier.padding(8.dp), maxLines = 3, overflow = TextOverflow.Ellipsis)
             }
         } else {
             AsyncImage(
-                model = url,
+                model = resolved,
                 contentDescription = title,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -339,7 +349,7 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
                 ) {
                     items(applied, key = { it.streamId }) { m ->
                         Column(Modifier.fillMaxWidth().clickable { onOpenMovie(m) }) {
-                            Poster(m.poster(), m.name, Modifier.fillMaxWidth().aspectRatio(2f / 3f))
+                            Poster(m.poster(), m.name, Modifier.fillMaxWidth().aspectRatio(2f / 3f), tmdbId = m.tmdb)
                             Spacer(Modifier.height(8.dp))
                             Text(m.name, color = TextHi, fontSize = 13.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                             m.rating?.let {
@@ -381,7 +391,7 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
 
         Row(Modifier.fillMaxWidth()) {
             // Poster links
-            Poster(m.poster(), m.name, Modifier.width(200.dp).aspectRatio(2f / 3f))
+            Poster(m.poster(), m.name, Modifier.width(200.dp).aspectRatio(2f / 3f), tmdbId = m.tmdb)
 
             Spacer(Modifier.width(24.dp))
 

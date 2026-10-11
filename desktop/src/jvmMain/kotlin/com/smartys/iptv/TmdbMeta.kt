@@ -13,8 +13,12 @@ object TmdbMeta {
         val runtime: Int?,
         val genres: List<String>,
         val tagline: String?,
-        val backdrop: String?
+        val backdrop: String?,
+        val poster: String?     // https://image.tmdb.org/t/p/w342/... (Cover-Fallback)
     )
+
+    /** In-Memory-Cache für Poster-URLs (verhindert N-fache Backend-Calls pro Liste). */
+    private val posterCache = java.util.concurrent.ConcurrentHashMap<String, String>()
 
     fun fetchMovie(tmdbId: String): MovieMeta? = runCatching {
         val conn = java.net.URL(BASE + tmdbId.trim()).openConnection() as javax.net.ssl.HttpsURLConnection
@@ -31,7 +35,17 @@ object TmdbMeta {
             genres = genres,
             tagline = root.optString("tagline").takeIf { it.isNotBlank() },
             backdrop = root.optString("backdrop_path").takeIf { it.isNotBlank() }
-                ?.let { "https://image.tmdb.org/t/p/w780$it" }
+                ?.let { "https://image.tmdb.org/t/p/w780$it" },
+            poster = root.optString("poster_path").takeIf { it.isNotBlank() }
+                ?.let { "https://image.tmdb.org/t/p/w342$it" }
         )
     }.getOrNull()
+
+    /** Nur die Poster-URL für eine TMDB-ID (leichtgewichtiger Fallback, gecacht). */
+    fun posterUrl(tmdbId: String): String? {
+        val id = tmdbId.trim()
+        if (id.isBlank()) return null
+        posterCache[id]?.let { return it }
+        return fetchMovie(id)?.poster?.also { posterCache[id] = it }
+    }
 }
