@@ -192,6 +192,9 @@ class VlcPlayer {
             val factoryArgs = mutableListOf(
                 "--no-video-title-show",
                 "--network-caching=1500",
+                // Marquee UND Logo gleichzeitig: beide sind VLC-Subfilter, ohne
+                // explizite Filterkette überschreiben sie sich gegenseitig.
+                "--sub-filter=marq:logo",
                 // Browser-User-Agent: viele Xtream-Panels blocken Requests ohne
                 // Browser-UA (407) — ohne UA wartet VLC lange bzw. der Kanal
                 // kommt gar nicht. Gleicher UA wie Box/exteplayer3.
@@ -323,13 +326,37 @@ class VlcPlayer {
         runCatching {
             val m = mp.marquee()
             m.setColour(color)
-            m.setSize(28)
-            m.setOpacity(230)
+            m.setSize(20)
+            m.setOpacity(220)
             m.setTimeout(timeoutMs)
             m.setPosition(position)
             m.setText(text)
             m.enable(true)
         }
+    }
+
+    /** Senderlogo als VLC-Logo-Overlay (ins Videobild, links unten). */
+    fun setLogo(path: String?) {
+        val mp = mediaPlayer ?: return
+        if (path == null || path.isBlank()) {
+            mp.logo().enable(false)
+            return
+        }
+        runCatching {
+            mp.logo().setFile(path)
+            mp.logo().setPosition(uk.co.caprica.vlcj.player.base.LogoPosition.BOTTOM_LEFT)
+            mp.logo().setOpacity(0.95f)
+        }
+    }
+
+    /** Logo ein-/ausblenden (zusammen mit dem OSD). */
+    fun showLogo(v: Boolean) {
+        runCatching { mediaPlayer?.logo()?.enable(v) }
+    }
+
+    /** Relatives Spulen (±ms) — für Timeshift im Archiv-Stream. */
+    fun seekBy(deltaMs: Long) {
+        runCatching { mediaPlayer?.controls()?.skipTime(deltaMs) }
     }
 
     fun hideOsd() {

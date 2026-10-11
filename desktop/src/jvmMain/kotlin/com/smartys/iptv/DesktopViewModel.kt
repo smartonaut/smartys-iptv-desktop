@@ -230,6 +230,12 @@ class DesktopViewModel {
         return c.streamUrl(channel.streamId)
     }
 
+    /** Timeshift-URL: Archiv-Stream ab `startTs` (Unix-Sekunden). */
+    fun timeshiftUrlFor(channel: LiveStream, startTs: Long, hours: Int): String? {
+        val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
+        return c.timeshiftUrl(channel.streamId, startTs, hours)
+    }
+
     fun epgFor(channel: LiveStream) {
         val id = channel.streamId
         if (epgCache.containsKey(id)) return

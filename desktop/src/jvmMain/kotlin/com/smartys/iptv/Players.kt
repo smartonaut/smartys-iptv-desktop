@@ -188,9 +188,24 @@ private fun attachMouseControls(
     canvas: Canvas,
     onBack: () -> Unit,
     onVolumeUp: () -> Unit,
-    onVolumeDown: () -> Unit
+    onVolumeDown: () -> Unit,
+    onMouseMove: (() -> Unit)? = null
 ) {
     var clickTimer: javax.swing.Timer? = null
+    if (onMouseMove != null) {
+        // Throttle: maximal ~7 Events pro Sekunde — sonst flutet die
+        // Mausbewegung den EDT und zerlegt die Doppelklick-Erkennung.
+        // Events kommen auf dem EDT an → direkt aufrufen.
+        val lastTs = java.util.concurrent.atomic.AtomicLong(0L)
+        canvas.addMouseMotionListener(object : java.awt.event.MouseMotionAdapter() {
+            override fun mouseMoved(e: MouseEvent) {
+                val now = System.currentTimeMillis()
+                if (now - lastTs.get() < 150) return
+                lastTs.set(now)
+                onMouseMove()
+            }
+        })
+    }
     canvas.addMouseListener(object : MouseAdapter() {
         override fun mouseClicked(e: MouseEvent) {
             if (e.button != MouseEvent.BUTTON1) return
@@ -356,6 +371,63 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     // Bis dahin läuft der Canvas unsichtbar (1px) und der Compose-
     // Lade-Indikator bleibt stehen.
     var videoReady by remember { mutableStateOf(false) }
+    // OSD: Marquee (Text + Laufzeitbalken) + Senderlogo als VLC-Overlay DIREKT
+    // ins Videobild — kein separates Fenster (JWindow-Transparenz scheitert
+    // unter XWayland), dadurch automatisch mit dem Bild skaliert und echt
+    // "transparent". Einmal zeigen für 5 s, weitere Bewegungen ignorieren.
+    val osdBusy = java.util.concurrent.atomic.AtomicBoolean(false)
+    fun showOsdNow() {
+        if (osdBusy.getAndSet(true)) return
+        val (nowE, _) = XmltvEpg.getNowAndNext(ch.epgChannelId)
+        val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val clock = fmt.format(Date())
+        val epgTxt = if (nowE != null) {
+            "${nowE.title}  ${fmt.format(Date(nowE.start))}–${fmt.format(Date(nowE.stop))}"
+        } else ""
+        val prog = if (nowE != null && nowE.stop > nowE.start) {
+            ((System.currentTimeMillis() - nowE.start).toFloat() /
+                (nowE.stop - nowE.start)).coerceIn(0f, 1f)
+        } else 0f
+        val filled = (prog * 24).toInt().coerceIn(0, 24)
+        // Schlichter Balken: nur der gefüllte Teil (▬ = zusammenhängende
+        // Linie), Rest bleibt unsichtbar — kein Karo-Muster, kein Kasten.
+        val bar = "▬".repeat(filled)
+        val line1 = if (epgTxt.isBlank()) "${ch.name}   $clock"
+                    else "${ch.name} — $epgTxt   $clock"
+        player.showOsd("$line1\n$bar", timeoutMs = 5000)
+        player.showLogo(true)
+        thread {
+            Thread.sleep(5200)
+            player.showLogo(false)
+            osdBusy.set(false)
+        }
+    }
+
+    // Senderlogo laden (einmal pro Kanal) und als VLC-Logo-Overlay setzen.
+    DisposableEffect(Unit) {
+        val icon = ch.streamIcon
+        if (!icon.isNullOrBlank()) {
+            thread {
+                runCatching {
+                    val dir = File(System.getProperty("user.home"), ".smartys-iptv/cache/logos")
+                    dir.mkdirs()
+                    val target = File(dir, ch.streamId + ".png")
+                    if (!target.exists() || target.length() == 0L) {
+                        val conn = java.net.URI(icon).toURL().openConnection()
+                        conn.setRequestProperty("User-Agent",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/145.0.0.0 Safari/537.36")
+                        conn.connectTimeout = 6000
+                        conn.readTimeout = 8000
+                        conn.getInputStream().use { ins ->
+                            target.outputStream().use { ins.copyTo(it) }
+                        }
+                    }
+                    if (target.length() > 0L) player.setLogo(target.absolutePath)
+                }
+            }
+        }
+        onDispose { }
+    }
     var paused by remember { mutableStateOf(false) }
     var volume by remember { mutableStateOf(100) }
     var brightness by remember { mutableStateOf(1.0f) }
@@ -366,6 +438,65 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     val recEngine = remember { RecordingEngine() }
     var recMode by remember { mutableStateOf<AdhocRecMode?>(null) }  // null = keine Aufnahme
     var showRecDialog by remember { mutableStateOf(false) }
+    // Timeshift: zwei Mechanismen —
+    // 1) VLC-Disk-Timeshift (Einstellung "timeshift_enabled"): VLC puffert
+    //    den Stream in Dateien, Pause/Seek funktionieren nativ im Buffer.
+    // 2) Server-Archiv (tv_archive=1): Wechsel auf /timeshift/-URL ab dem
+    //    Pause-Zeitpunkt. tsServerActive + behindSec tracken diesen Fall.
+    var tsServerActive by remember { mutableStateOf(false) }
+    var behindSec by remember { mutableStateOf(0L) }
+
+    fun doTogglePause() {
+        if (paused) {
+            paused = false
+            player.resume()
+        } else if (timeshift) {
+            // VLC-Disk-Timeshift: einfacher Pause — VLC puffert weiter,
+            // Resume läuft ab der Stelle, ◀/▶ spulen im Buffer.
+            player.pause()
+            paused = true
+            player.showOsd("⏸ Pause — ◀ ▶ spulen", 2000)
+        } else if (ch.hasArchive() && !tsServerActive) {
+            val u = vm.timeshiftUrlFor(
+                ch, System.currentTimeMillis() / 1000, ch.archiveHours()
+            )
+            if (u != null) {
+                tsServerActive = true
+                player.stop()
+                player.play(u)
+                player.pause()
+                paused = true
+                player.showOsd("⏸ Pause — zurück mit ◀", 2000)
+            } else {
+                player.pause()
+                paused = true
+            }
+        } else {
+            player.pause()
+            paused = true
+        }
+    }
+
+    fun seekTs(deltaSec: Long) {
+        if (tsServerActive) {
+            behindSec = (behindSec + deltaSec).coerceAtLeast(0L)
+            player.seekBy(deltaSec * 1000)
+            if (behindSec == 0L) {
+                player.showOsd("● LIVE", 1800)
+            } else {
+                val mm = behindSec / 60
+                val ss = behindSec % 60
+                player.showOsd("⏪ -%02d:%02d".format(mm, ss), 1800)
+            }
+        } else {
+            // VLC-Disk-Timeshift: VLC klemmt automatisch an Buffer-Anfang
+            // bzw. Live-Ende.
+            player.seekBy(deltaSec * 1000)
+            player.showOsd(
+                if (deltaSec < 0) "⏪ ${-deltaSec}s" else "⏩ ${deltaSec}s", 1500
+            )
+        }
+    }
 
     EscapeToBack(onBack)
 
@@ -388,15 +519,18 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                         return true
                     }
                     KeyEvent.VK_LEFT -> {
+                        if (timeshift || tsServerActive) { seekTs(10); return true }
                         brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness)
                         player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500)
                         return true
                     }
                     KeyEvent.VK_RIGHT -> {
+                        if (timeshift || tsServerActive) { seekTs(-10); return true }
                         brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness)
                         player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500)
                         return true
                     }
+                    KeyEvent.VK_SPACE -> { doTogglePause(); return true }
                     KeyEvent.VK_R -> { showRecDialog = true; return true }
                     KeyEvent.VK_S -> { recEngine.stop(); recMode = null; return true }
                 }
@@ -410,15 +544,11 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         onDispose { mgr.removeKeyEventDispatcher(liveTvDispatcher) }
     }
 
-    // OSD beim Kanalstart: sobald der Player initialisiert ist (inited), Kanalname
-    // + laufende Sendung via Marquee einblenden.
+    // OSD beim Kanalstart: sobald der Player initialisiert ist, die OSD-Leiste
+    // (Kanalname + Sendung + Uhrzeit + Laufzeitbalken) kurz einblenden.
     LaunchedEffect(inited) {
         if (!inited) return@LaunchedEffect
-        val title = runCatching {
-            XmltvEpg.getNowAndNext(ch.epgChannelId).first?.title
-        }.getOrNull()
-        val osd = if (title.isNullOrBlank()) ch.name else "${ch.name}  —  $title"
-        player.showOsd(osd, 4000)
+        showOsdNow()
     }
 
     // Bei „laufende Sendung": automatisch am EPG-Ende stoppen
@@ -461,7 +591,8 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                         canvas,
                         onBack = onBack,
                         onVolumeUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) },
-                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) }
+                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) },
+                        onMouseMove = { showOsdNow() }
                     )
                     val start = {
                         if (player.init()) {
@@ -513,8 +644,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             Spacer(Modifier.weight(1f))
             Text(if (paused) "▶" else "❚❚", color = TextHi, fontSize = 18.sp,
                 modifier = Modifier.clickable {
-                    paused = !paused
-                    if (paused) player.pause() else player.resume()
+                    doTogglePause()
                 }.padding(horizontal = 10.dp))
         }
 

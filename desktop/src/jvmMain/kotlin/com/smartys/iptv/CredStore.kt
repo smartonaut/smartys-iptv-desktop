@@ -21,6 +21,15 @@ object CredStore {
         fun streamUrl(streamId: String, ext: String = "m3u8"): String =
             "$url/live/$user/$pass/$streamId.$ext"
 
+        /**
+         * Timeshift-URL (Xtream-Standard): Archiv-Stream ab `startTs`
+         * (Unix-Sekunden), `hours` Stunden verfügbar. Nur für Sender mit
+         * tv_archive=1 — der Server liefert ab dem Zeitpunkt, dadurch kann
+         * der Player pausieren/zurückspulen ohne eigene Aufzeichnung.
+         */
+        fun timeshiftUrl(streamId: String, startTs: Long, hours: Int): String =
+            "$url/timeshift/$user/$pass/$hours/$startTs/$streamId.m3u8"
+
         fun movieUrl(streamId: String, ext: String = "mp4"): String =
             "$url/movie/$user/$pass/$streamId.$ext"
 
