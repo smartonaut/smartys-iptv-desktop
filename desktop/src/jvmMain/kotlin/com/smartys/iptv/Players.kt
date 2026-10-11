@@ -217,7 +217,7 @@ private fun attachMouseControls(
 
 /** Pfeiltasten bei VOD: Links = -10s, Rechts = +10s (an die Länge geklemmt). */
 @Composable
-private fun ArrowSeek(player: VlcPlayer) {
+private fun ArrowSeek(player: MpvPlayer) {
     val dispatcher = remember(player) {
         object : KeyEventDispatcher {
             override fun dispatchKeyEvent(e: KeyEvent): Boolean {
@@ -346,7 +346,7 @@ private fun EdgeStrip(
 
 @Composable
 fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: () -> Unit) {
-    val player = remember { VlcPlayer() }
+    val player = remember { MpvPlayer() }
     val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }
@@ -524,7 +524,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
 
 @Composable
 fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
-    val player = remember { VlcPlayer() }
+    val player = remember { MpvPlayer() }
     val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
     var paused by remember { mutableStateOf(false) }

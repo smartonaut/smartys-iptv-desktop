@@ -9,7 +9,7 @@ import java.awt.image.BufferedImage
  * Gleiche Schwellen wie die Android-App.
  */
 class CreditsWatcher(
-    private val player: VlcPlayer,
+    private val player: MpvPlayer,
     private val onCreditsDetected: () -> Unit
 ) {
     private companion object {
