@@ -194,6 +194,41 @@ fun SettingsScreen(vm: DesktopViewModel) {
         Text("Auto erkennt das System selbst (z. B. Hybrid-Grafik → Software). Nur bei Problemen manuell wählen.",
             color = TextMid, fontSize = 12.sp)
 
+        Spacer(Modifier.height(24.dp))
+
+        // ---- Stream-Puffer (Anti-Freeze, User-Vorgabe: Sekunden einstellbar) ----
+        Text("Stream-Puffer", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        var cacheSecs by remember { mutableStateOf(AppSettings.cacheSeconds()) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Slider(
+                value = cacheSecs.toFloat(),
+                onValueChange = { v ->
+                    cacheSecs = v.toInt()
+                    AppSettings.setCacheSeconds(cacheSecs)
+                },
+                valueRange = 0f..30f,
+                steps = 29,
+                modifier = Modifier.weight(1f),
+                colors = SliderDefaults.colors(
+                    thumbColor = Accent, activeTrackColor = Accent, inactiveTrackColor = Color(0x33555555)
+                )
+            )
+            Spacer(Modifier.width(14.dp))
+            Text(
+                if (cacheSecs <= 0) "aus" else "$cacheSecs s",
+                color = if (cacheSecs <= 0) TextMid else Accent,
+                fontSize = 15.sp, fontWeight = FontWeight.Bold
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "Wie viele Sekunden des Streams vorgehalten werden — beugt Bild-Freezern bei schwacher Leitung vor. " +
+                "Mehr Puffer = stabiler, aber mehr Verzögerung. 0 = sofortiger Start ohne Puffer. " +
+                "Gilt für Live-TV und VOD (neustarten zum Übernehmen).",
+            color = TextMid, fontSize = 12.sp
+        )
+
         Spacer(Modifier.height(16.dp))
 
         // ---- Aufnahme-Daemon Autostart (optional) ----

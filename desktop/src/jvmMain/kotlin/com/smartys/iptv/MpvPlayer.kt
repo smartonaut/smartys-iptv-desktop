@@ -72,26 +72,18 @@ class MpvPlayer : VodPlayerApi {
             // Schnellerer Senderwechsel: kein Stream-Probing + kein Pausieren beim Puffern
             MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-lavf-probe-info", "nostreams")
             MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache-pause", "no")
-            when (AppSettings.cacheMode()) {
-                "none" -> {
-                    // Kein Cache — Bild startet sofort (stottert bei schwacher Leitung)
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache", "no")
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-readahead-secs", "1")
-                }
-                "max" -> {
-                    // Großer Cache für schwache Leitungen (längere Startzeit)
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache", "yes")
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-max-bytes", "64MiB")
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-readahead-secs", "3")
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache-secs", "10")
-                }
-                else -> {
-                    // Auto: moderater Cache (schneller Start)
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache", "yes")
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-max-bytes", "16MiB")
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-readahead-secs", "1")
-                    MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache-secs", "2")
-                }
+            // Stream-Puffer in Sekunden (Einstellung, User-Vorgabe):
+            // 0 = kein Cache (Bild startet sofort), >0 = vorhalten gegen Freezer.
+            val cacheSecs = AppSettings.cacheSeconds()
+            if (cacheSecs <= 0) {
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache", "no")
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-readahead-secs", "1")
+            } else {
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache", "yes")
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-readahead-secs", cacheSecs.toString())
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache-secs", cacheSecs.toString())
+                val maxMiB = (cacheSecs * 8).coerceAtMost(128)
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-max-bytes", "${maxMiB}MiB")
             }
             // Software-Decoding: initiiert schneller als hwdec-Erkennung (auto-safe)
             MpvLib.INSTANCE.mpv_set_option_string(ctx, "hwdec", "no")

@@ -87,6 +87,16 @@ object AppSettings {
     fun setCacheMode(mode: String) = set("cache_mode", mode)
 
     /**
+     * Stream-Puffer in Sekunden (User-Vorgabe "wieviel Sekunden gecacht werden
+     * sollen, um Freezer vorzubeugen"). 0 = kein Puffer (sofortiger Start,
+     * stottert bei schwacher Leitung), 1–60 s = vorhalten.
+     * VLC: network-caching/live-caching in ms; mpv: cache-secs/demuxer-readahead-secs.
+     */
+    fun cacheSeconds(): Int = get("cache_seconds", "3").toIntOrNull()?.coerceIn(0, 60) ?: 3
+
+    fun setCacheSeconds(seconds: Int) = set("cache_seconds", seconds.coerceIn(0, 60).toString())
+
+    /**
      * Effektive libVLC-Argumente für den Decoding-Modus:
      *  - auto: keine (libVLC auto-detekt, wie die VLC-App)
      *  - hw:   Hardware-Decoding forcieren

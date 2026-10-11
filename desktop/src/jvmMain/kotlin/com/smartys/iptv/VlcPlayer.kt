@@ -191,7 +191,11 @@ class VlcPlayer : VodPlayerApi {
 
             val factoryArgs = mutableListOf(
                 "--no-video-title-show",
-                "--network-caching=1500",
+                // Stream-Puffer (Einstellung "Stream-Puffer" in Sekunden):
+                // mehr Puffer = weniger Freezer bei schwacher Leitung, dafür
+                // mehr Verzögerung. 0 s = nur minimales Puffern (schneller Start).
+                "--network-caching=${(AppSettings.cacheSeconds().coerceAtLeast(0) * 1000).coerceAtLeast(300)}",
+                "--live-caching=${(AppSettings.cacheSeconds().coerceAtLeast(0) * 1000).coerceAtLeast(300)}",
                 // Marquee UND Logo gleichzeitig: beide sind VLC-Subfilter, ohne
                 // explizite Filterkette überschreiben sie sich gegenseitig.
                 "--sub-filter=marq:logo",
