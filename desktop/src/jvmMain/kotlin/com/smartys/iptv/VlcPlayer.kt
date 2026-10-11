@@ -421,6 +421,7 @@ class VlcPlayer : VodPlayerApi {
         fun SetWindowLongW(hwnd: Long, index: Int, style: Int): Int
         fun EnumChildWindows(parent: Long, cb: WndEnumProc, lParam: Long): Boolean
         fun GetClassNameW(hwnd: Long, buf: CharArray, max: Int): Int
+        fun EnableWindow(hwnd: Long, enable: Boolean): Boolean
     }
 
     private interface WndEnumProc : com.sun.jna.Callback {
@@ -521,12 +522,16 @@ class VlcPlayer : VodPlayerApi {
                     val n = u32.GetClassNameW(hwnd, buf, 64)
                     val cls = if (n > 0) String(buf, 0, n) else ""
                     if (cls.startsWith("VLC video")) {
+                        // 1.5.17: WS_EX_TRANSPARENT ALLEINE hat keine Hit-Test-Wirkung
+                        // (1.5.16: Schalter gesetzt, Klicks kamen trotzdem nicht an).
+                        // Dokumentiertes Klick-Durchlass-Rezept: LAYERED | TRANSPARENT.
+                        // Zusaetzlich EnableWindow(FALSE): deaktivierte Fenster empfangen
+                        // ueberhaupt keine Maus-Eingabe (ohne Rendering-Nebenwirkung).
                         val ex = u32.GetWindowLongW(hwnd, -20) // GWL_EXSTYLE
-                        if (ex and 0x20 == 0) { // WS_EX_TRANSPARENT noch nicht gesetzt
-                            u32.SetWindowLongW(hwnd, -20, ex or 0x20)
-                            PlayerLog.log("WS_EX_TRANSPARENT gesetzt auf '$cls' (hwnd=$hwnd)")
-                            applied[0]++
-                        }
+                        u32.SetWindowLongW(hwnd, -20, ex or 0x20 or 0x80000) // +WS_EX_TRANSPARENT +WS_EX_LAYERED
+                        u32.EnableWindow(hwnd, false)
+                        PlayerLog.log("VLC-Fenster neutralisiert: '$cls' (hwnd=$hwnd ex=0x${u32.GetWindowLongW(hwnd, -20).toString(16)})")
+                        applied[0]++
                     }
                     return true
                 }
