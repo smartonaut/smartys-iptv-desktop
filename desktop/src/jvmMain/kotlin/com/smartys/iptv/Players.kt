@@ -238,14 +238,14 @@ private fun attachMouseControls(
 
 /** Pfeiltasten bei VOD: Links = -10s, Rechts = +10s (an die Länge geklemmt). */
 @Composable
-private fun ArrowSeek(player: VodPlayerApi) {
+private fun ArrowSeek(player: VodPlayerApi, onSeek: (() -> Unit)? = null) {
     val dispatcher = remember(player) {
         object : KeyEventDispatcher {
             override fun dispatchKeyEvent(e: KeyEvent): Boolean {
                 if (e.id == KeyEvent.KEY_PRESSED) {
                     when (e.keyCode) {
-                        KeyEvent.VK_LEFT -> { seekBy(-10_000); return true }
-                        KeyEvent.VK_RIGHT -> { seekBy(10_000); return true }
+                        KeyEvent.VK_LEFT -> { seekBy(-10_000); onSeek?.invoke(); return true }
+                        KeyEvent.VK_RIGHT -> { seekBy(10_000); onSeek?.invoke(); return true }
                     }
                 }
                 return false
@@ -398,7 +398,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         val bar = "▬".repeat(filled)
         val line1 = if (epgTxt.isBlank()) "${ch.name}   $clock"
                     else "${ch.name} — $epgTxt   $clock"
-        player.showOsd("$line1\n$bar", timeoutMs = 5000)
+        player.showOsd("$line1\n$bar", 5000, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
         player.showLogo(true)
         thread {
             Thread.sleep(5200)
@@ -459,7 +459,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             // Resume läuft ab der Stelle, ◀/▶ spulen im Buffer.
             player.pause()
             paused = true
-            player.showOsd("⏸ Pause — ◀ ▶ spulen", 2000)
+            player.showOsd("⏸ Pause — ◀ ▶ spulen", 2000, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
         } else if (ch.hasArchive() && !tsServerActive) {
             val u = vm.timeshiftUrlFor(
                 ch, System.currentTimeMillis() / 1000, ch.archiveHours()
@@ -470,7 +470,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 player.play(u, isVod = false, timeshift = false, timeshiftDir = null, startPosMs = 0)
                 player.pause()
                 paused = true
-                player.showOsd("⏸ Pause — zurück mit ◀", 2000)
+                player.showOsd("⏸ Pause — zurück mit ◀", 2000, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
             } else {
                 player.pause()
                 paused = true
@@ -486,18 +486,19 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             behindSec = (behindSec + deltaSec).coerceAtLeast(0L)
             player.seekBy(deltaSec * 1000)
             if (behindSec == 0L) {
-                player.showOsd("● LIVE", 1800)
+                player.showOsd("● LIVE", 1800, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
             } else {
                 val mm = behindSec / 60
                 val ss = behindSec % 60
-                player.showOsd("⏪ -%02d:%02d".format(mm, ss), 1800)
+                player.showOsd("⏪ -%02d:%02d".format(mm, ss), 1800, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
             }
         } else {
             // VLC-Disk-Timeshift: VLC klemmt automatisch an Buffer-Anfang
             // bzw. Live-Ende.
             player.seekBy(deltaSec * 1000)
             player.showOsd(
-                if (deltaSec < 0) "⏪ ${-deltaSec}s" else "⏩ ${deltaSec}s", 1500
+                if (deltaSec < 0) "⏪ ${-deltaSec}s" else "⏩ ${deltaSec}s",
+                1500, MarqueePosition.BOTTOM, java.awt.Color.WHITE
             )
         }
     }
@@ -514,24 +515,24 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 when (e.keyCode) {
                     KeyEvent.VK_UP -> {
                         volume = (volume + 10).coerceAtMost(100); player.setVolume(volume)
-                        player.showOsd("Lautstärke  $volume%", 1500)
+                        player.showOsd("Lautstärke  $volume%", 1500, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
                         return true
                     }
                     KeyEvent.VK_DOWN -> {
                         volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume)
-                        player.showOsd("Lautstärke  $volume%", 1500)
+                        player.showOsd("Lautstärke  $volume%", 1500, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
                         return true
                     }
                     KeyEvent.VK_LEFT -> {
                         if (timeshift || tsServerActive) { seekTs(10); return true }
                         brightness = (brightness - 0.1f).coerceAtLeast(0.0f); player.setBrightness(brightness)
-                        player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500)
+                        player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
                         return true
                     }
                     KeyEvent.VK_RIGHT -> {
                         if (timeshift || tsServerActive) { seekTs(-10); return true }
                         brightness = (brightness + 0.1f).coerceAtMost(2.0f); player.setBrightness(brightness)
-                        player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500)
+                        player.showOsd("Helligkeit  ${(brightness * 100).toInt()}%", 1500, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
                         return true
                     }
                     KeyEvent.VK_SPACE -> { doTogglePause(); return true }
@@ -594,8 +595,8 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                     attachMouseControls(
                         canvas,
                         onBack = onBack,
-                        onVolumeUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) },
-                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200) },
+                        onVolumeUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200, MarqueePosition.BOTTOM, java.awt.Color.WHITE) },
+                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume); player.showOsd("Lautstärke  $volume%", 1200, MarqueePosition.BOTTOM, java.awt.Color.WHITE) },
                         onMouseMove = { showOsdNow() }
                     )
                     val start = {
@@ -717,9 +718,44 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
         vp.forceStartPos ?: ResumeStore.position(vp.key)
     }
 
+    // Mausover-OSD (User-Vorgabe): kurz einblenden, was laeuft + Restlaufzeit.
+    // Marquee geht DIREKT ins Videobild — Compose-Overlays blieben hinter dem
+    // heavyweight Canvas unsichtbar. attachMouseControls drosselt auf ~7/s;
+    // der 5-s-Timeout blendet aus, sobald die Maus ruht.
+    fun showVodOsd() {
+        val dur = player.durationMs()
+        val rest = if (dur > 0) (dur - player.currentPositionMs()).coerceAtLeast(0L) else 0L
+        val icon = if (paused) "\u23F8" else "\u25B6"
+        val restTxt = if (dur > 0) "  \u00B7  noch ${fmt(rest)}" else ""
+        player.showOsd("$icon ${vp.title}$restTxt", 5000, position = MarqueePosition.TOP)
+    }
+
     EscapeToBack(onBack)
 
-    ArrowSeek(player)
+    ArrowSeek(player, onSeek = { showVodOsd() })
+
+    // Leertaste = Pause/Weiter (User-Vorgabe: bei VOD einfach nur Pause —
+    // Live-TV pausiert ueber den Disk-Timeshift weiter, VOD pausiert simpel).
+    DisposableEffect(Unit) {
+        val d = object : KeyEventDispatcher {
+            override fun dispatchKeyEvent(e: KeyEvent): Boolean {
+                if (e.id != KeyEvent.KEY_PRESSED) return false
+                if (e.keyCode == KeyEvent.VK_SPACE) {
+                    paused = !paused
+                    if (paused) player.pause() else player.resume()
+                    showVodOsd()
+                    return true
+                }
+                return false
+            }
+        }
+        val mgr = KeyboardFocusManager.getCurrentKeyboardFocusManager()
+        mgr.addKeyEventDispatcher(d)
+        onDispose { mgr.removeKeyEventDispatcher(d) }
+    }
+
+    // OSD einmal beim Start (Titel + Restlaufzeit), sobald das Bild steht
+    LaunchedEffect(videoReady) { if (videoReady) showVodOsd() }
 
     VolumeArrows(
         onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
@@ -771,7 +807,8 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                         canvas,
                         onBack = onBack,
                         onVolumeUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
-                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) }
+                        onVolumeDown = { volume = (volume - 10).coerceAtLeast(0); player.setVolume(volume) },
+                        onMouseMove = { showVodOsd() }
                     )
                     val doStart = {
                         if (!inited) {

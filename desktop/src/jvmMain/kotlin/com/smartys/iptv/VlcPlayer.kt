@@ -324,9 +324,9 @@ class VlcPlayer : VodPlayerApi {
      * verschwindet das NICHT hinter dem heavyweight Video-Canvas — libVLC zeichnet
      * es in den Frame. timeoutMs = 0 blendet nie automatisch aus.
      */
-    fun showOsd(text: String, timeoutMs: Int = 0,
-                position: MarqueePosition = MarqueePosition.BOTTOM,
-                color: java.awt.Color = java.awt.Color.WHITE) {
+    override fun showOsd(text: String, timeoutMs: Int,
+                position: MarqueePosition,
+                color: java.awt.Color) {
         val mp = mediaPlayer ?: return
         runCatching {
             val m = mp.marquee()

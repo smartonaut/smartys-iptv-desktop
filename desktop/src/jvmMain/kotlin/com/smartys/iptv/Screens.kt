@@ -481,6 +481,31 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                     ) {
                         Text("Von vorne abspielen", fontWeight = FontWeight.Bold)
                     }
+                    // Herunterladen (User-Vorgabe): kompletter Film als Datei —
+                    // läuft mit Fortschritt und taucht im Aufnahmen-Tab auf.
+                    val dlId = "vod:movie:${m.streamId}"
+                    val dlState = VodDownloader.items.firstOrNull { it.id == dlId }
+                    when (dlState?.status) {
+                        "running" -> OutlinedButton(onClick = { VodDownloader.pause(dlId) }) {
+                            Text("⏳ Herunterladen … ${(dlState.progress * 100).toInt()} % — pausieren", color = TextHi)
+                        }
+                        "paused" -> OutlinedButton(onClick = { VodDownloader.resume(dlId) }) {
+                            Text("▶ Download fortsetzen", color = TextHi)
+                        }
+                        "complete" -> Text(
+                            "✓ Heruntergeladen — im Tab Aufnahmen", color = Color(0xFF6FCF9F), fontSize = 13.sp
+                        )
+                        "error" -> OutlinedButton(onClick = {
+                            if (url != null) VodDownloader.start(dlId, m.name, url, m.containerExtension ?: "mp4")
+                        }) {
+                            Text("⚠ Download fehlgeschlagen — erneut versuchen", color = TextHi)
+                        }
+                        else -> OutlinedButton(onClick = {
+                            if (url != null) VodDownloader.start(dlId, m.name, url, m.containerExtension ?: "mp4")
+                        }) {
+                            Text("⬇ Herunterladen", color = TextHi)
+                        }
+                    }
                     // Trailer (wenn vorhanden)
                     if (m.hasTrailer()) {
                         OutlinedButton(onClick = {

@@ -1,5 +1,6 @@
 package com.smartys.iptv
 
+import uk.co.caprica.vlcj.player.base.MarqueePosition
 import java.awt.Canvas
 import java.awt.image.BufferedImage
 
@@ -31,4 +32,12 @@ interface VodPlayerApi {
     fun setVolume(v: Int)
     fun setBrightness(b: Float)
     fun snapshot(): BufferedImage?
+
+    /** Text-OSD direkt ins Videobild (VLC-Marquee / mpv show-text). */
+    fun showOsd(
+        text: String,
+        timeoutMs: Int = 0,
+        position: MarqueePosition = MarqueePosition.BOTTOM,
+        color: java.awt.Color = java.awt.Color.WHITE
+    )
 }

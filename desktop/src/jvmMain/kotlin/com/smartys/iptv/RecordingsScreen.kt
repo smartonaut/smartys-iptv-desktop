@@ -28,11 +28,16 @@ import java.util.Locale
  * und verwalten (anzeigen, löschen).
  */
 @Composable
-fun RecordingsScreen(vm: DesktopViewModel, state: AppState.Ready) {
+fun RecordingsScreen(vm: DesktopViewModel, state: AppState.Ready,
+                    onPlay: (java.io.File, String, String) -> Unit) {
     var recordings by remember { mutableStateOf(RecordingStore.load()) }
     var mode by remember { mutableStateOf<RecordMode?>(null) }
 
     fun refresh() { recordings = RecordingStore.load() }
+
+    // Heruntergeladene Filme/Episoden gehören hierher (User-Vorgabe: "dann
+    // komplett geladen und in meinen Aufnahmen aufgetaucht").
+    LaunchedEffect(Unit) { VodDownloader.load() }
 
     Column(Modifier.fillMaxSize().background(Bg).padding(24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -69,6 +74,22 @@ fun RecordingsScreen(vm: DesktopViewModel, state: AppState.Ready) {
                 }
             }
         }
+
+        Spacer(Modifier.height(24.dp))
+
+        // ---- Heruntergeladene Filme & Episoden ----
+        val dls = VodDownloader.items
+        Text("Heruntergeladene Filme & Episoden", color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        if (dls.isEmpty()) {
+            Text("Noch keine Downloads. Filme lädst du über den ⬇-Button auf der Detailseite.", color = TextMid, fontSize = 13.sp)
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                items(dls, key = { it.id }) { d ->
+                    DownloadedRow(d, onPlay = onPlay)
+                }
+            }
+        }
     }
 
     // EPG-Auswahl-Dialog
@@ -97,6 +118,37 @@ private fun RecordingRow(r: RecordingStore.Recording, onDelete: () -> Unit) {
         }
         Spacer(Modifier.width(10.dp))
         Text("🗑", color = Danger, fontSize = 16.sp, modifier = Modifier.clickable(onClick = onDelete).padding(8.dp))
+    }
+}
+
+/** Eine heruntergeladene Datei (Film/Episode) mit Status, Play und Löschen. */
+@Composable
+private fun DownloadedRow(d: DownloadItem, onPlay: (java.io.File, String, String) -> Unit) {
+    val file = File(VodDownloader.downloadsDir(), d.fileName)
+    val statusTxt = when (d.status) {
+        "complete" -> "✓ bereit  ·  ${d.downloadedBytes / 1_000_000} MB"
+        "running" -> "⏳ wird geladen … ${(d.progress * 100).toInt()} %"
+        "paused" -> "⏸ pausiert  ·  ${(d.progress * 100).toInt()} %"
+        else -> "⚠ ${d.error ?: "Fehler"}"
+    }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Card).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(d.title, color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(statusTxt, color = TextMid, fontSize = 12.sp)
+        }
+        Spacer(Modifier.width(10.dp))
+        if (d.status == "complete") {
+            Text("▶", color = Accent, fontSize = 18.sp,
+                modifier = Modifier.clickable { onPlay(file, d.title, d.id) }.padding(horizontal = 10.dp))
+        } else if (d.status == "paused") {
+            Text("▶", color = Accent, fontSize = 18.sp,
+                modifier = Modifier.clickable { VodDownloader.resume(d.id) }.padding(horizontal = 10.dp))
+        }
+        Text("🗑", color = Danger, fontSize = 16.sp,
+            modifier = Modifier.clickable { VodDownloader.delete(d.id) }.padding(8.dp))
     }
 }
 

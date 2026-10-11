@@ -115,7 +115,9 @@ fun App() {
                                     onPlay = { file, title, id ->
                                         vodPlaying = VodPlaying(title, file.toURI().toString(), "vod:download:$id", id, null, false, null)
                                     })
-                                Tab.RECORDINGS -> RecordingsScreen(vm, s)
+                                Tab.RECORDINGS -> RecordingsScreen(vm, s, onPlay = { file, title, id ->
+                                    vodPlaying = VodPlaying(title, file.toURI().toString(), "vod:download:$id", id, null, false, null)
+                                })
                                 Tab.SETTINGS -> SettingsScreen(vm)
                             }
                         }

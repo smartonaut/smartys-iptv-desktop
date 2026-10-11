@@ -295,11 +295,11 @@ class MpvPlayer : VodPlayerApi {
 
     /** OSD direkt ins Videobild. libmpv (show-text) kennt keine Position/Farbe,
      *  daher werden position/color akzeptiert, aber ignoriert (zentriert angezeigt). */
-    fun showOsd(
+    override fun showOsd(
         text: String,
-        timeoutMs: Int = 0,
-        position: uk.co.caprica.vlcj.player.base.MarqueePosition = uk.co.caprica.vlcj.player.base.MarqueePosition.BOTTOM,
-        color: java.awt.Color = java.awt.Color.WHITE
+        timeoutMs: Int,
+        position: uk.co.caprica.vlcj.player.base.MarqueePosition,
+        color: java.awt.Color
     ) {
         handle?.let {
             MpvLib.INSTANCE.mpv_command(it, arrayOf("show-text", text, (timeoutMs / 1000).toString()))
