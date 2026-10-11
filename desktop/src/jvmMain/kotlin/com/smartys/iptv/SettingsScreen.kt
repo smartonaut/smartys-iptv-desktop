@@ -13,9 +13,41 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
+import androidx.compose.foundation.Image
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+
+fun qrCodeImageBitmap(content: String, size: Int = 512): ImageBitmap {
+    val matrix = QRCodeWriter().encode(content, BarcodeFormat.QR_CODE, size, size)
+    val info = org.jetbrains.skia.ImageInfo.makeN32Premul(size, size)
+    val bmp = org.jetbrains.skia.Bitmap()
+    bmp.allocPixels(info)
+    val canvas = org.jetbrains.skia.Canvas(bmp)
+    canvas.clear(0xFFFFFFFF.toInt())
+    val paint = org.jetbrains.skia.Paint().apply { color = 0xFF10141F.toInt() }
+    for (y in 0 until size) {
+        for (x in 0 until size) {
+            if (matrix[x, y]) {
+                canvas.drawRect(
+                    org.jetbrains.skia.Rect.makeXYWH(x.toFloat(), y.toFloat(), 1f, 1f),
+                    paint
+                )
+            }
+        }
+    }
+    return org.jetbrains.skia.Image.makeFromBitmap(bmp).toComposeImageBitmap()
+}
+
+@Composable
+fun QrCode(content: String, modifier: Modifier = Modifier) {
+    val bmp = remember(content) { qrCodeImageBitmap(content) }
+    Image(bitmap = bmp, contentDescription = "QR-Code zum Pairing", modifier = modifier)
+}
 
 @Composable
 fun SettingsScreen(vm: DesktopViewModel) {
@@ -209,6 +241,15 @@ fun SettingsScreen(vm: DesktopViewModel) {
         Spacer(Modifier.height(10.dp))
         Text("Player-ID: ${CredStore.playerId()}", color = TextMid, fontSize = 14.sp)
         Text("Passwort: ${CredStore.pairingPw()}", color = TextMid, fontSize = 14.sp)
+        Spacer(Modifier.height(14.dp))
+        // QR-Code: scannen statt abtippen
+        QrCode(
+            "https://panel.smartys.tech/pair?mac=${CredStore.playerId()}&pw=${CredStore.pairingPw()}",
+            modifier = Modifier.size(180.dp).clip(RoundedCornerShape(10.dp))
+                .background(Color.White).padding(10.dp)
+        )
+        Spacer(Modifier.height(10.dp))
+        Text("QR-Code mit dem Handy scannen", color = TextMid, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
         Text(
             "Playlist verwalten: panel.smartys.tech",

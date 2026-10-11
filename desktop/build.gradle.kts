@@ -39,6 +39,8 @@ kotlin {
                 // Bilder (Poster/Cover) — Coil 3 multiplatform (3.2.0 = Kotlin 2.1.20, passt zum Projekt)
                 implementation("io.coil-kt.coil3:coil-compose:3.2.0")
                 implementation("io.coil-kt.coil3:coil-network-okhttp:3.2.0")
+                // QR-Code fürs Pairing (scannen statt abtippen)
+                implementation("com.google.zxing:core:3.5.3")
             }
         }
     }
