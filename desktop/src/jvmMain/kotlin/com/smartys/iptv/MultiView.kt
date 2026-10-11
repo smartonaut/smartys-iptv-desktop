@@ -121,7 +121,9 @@ private fun MultiViewCell(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val player = remember(ch.streamId) { MpvPlayer() }
+    // 1.5.11: Windows friert im mpv-Embedding ein (wie VOD) — VLC-Kacheln.
+    // Linux behaelt mpv (funktioniert dort sauber, unveraendert).
+    val player = remember(ch.streamId) { if (isWindowsOS) VlcPlayer() else MpvPlayer() }
     val canvas = remember(ch.streamId) { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember(ch.streamId) { mutableStateOf(false) }
 

@@ -284,6 +284,7 @@ class VlcPlayer : VodPlayerApi {
      *  timeshift = true puffert den Stream auf die Platte (libVLC input-timeshift),
      *  sodass Pause + Zurückspulen am Live-Kanal möglich sind. */
     override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?, startPosMs: Long) {
+        PlayerLog.log("VLC play vod=$isVod timeshift=$timeshift start=$startPosMs url=${url.take(80)}")
         val mp = mediaPlayer ?: return
         currentUrl = url
         currentIsVod = isVod
@@ -304,21 +305,29 @@ class VlcPlayer : VodPlayerApi {
     }
 
     override fun pause() {
+        PlayerLog.mark("VLC pause")
         mediaPlayer?.controls()?.setPause(true)
+        PlayerLog.done("pause")
     }
 
     override fun resume() {
+        PlayerLog.mark("VLC resume")
         mediaPlayer?.controls()?.setPause(false)
+        PlayerLog.done("resume")
     }
 
     override fun stop() {
+        PlayerLog.mark("VLC stop")
         currentUrl = null
         mediaPlayer?.controls()?.stop()
         playing = false
+        PlayerLog.done("stop")
     }
 
     override fun seekTo(posMs: Long) {
+        PlayerLog.mark("VLC seekTo $posMs")
         mediaPlayer?.controls()?.setTime(posMs)
+        PlayerLog.done("seekTo")
     }
 
     override fun currentPositionMs(): Long =
@@ -329,15 +338,24 @@ class VlcPlayer : VodPlayerApi {
 
     /** Lautstärke (0–200, 100 = normal). */
     override fun setVolume(v: Int) {
+        PlayerLog.mark("VLC setVolume $v")
         mediaPlayer?.audio()?.setVolume(v)
+        PlayerLog.done("setVolume")
     }
 
     fun volume(): Int =
         mediaPlayer?.audio()?.volume() ?: 100
 
+    /** Multi-View: nur der aktive Stream hat Ton, die anderen sind stumm. */
+    override fun setMuted(muted: Boolean) {
+        mediaPlayer?.audio()?.setMute(muted)
+    }
+
     /** Helligkeit (0.0–2.0, 1.0 = neutral). */
     override fun setBrightness(b: Float) {
+        PlayerLog.mark("VLC setBrightness $b")
         mediaPlayer?.video()?.setBrightness(b)
+        PlayerLog.done("setBrightness")
     }
 
     fun brightness(): Float =
@@ -354,6 +372,7 @@ class VlcPlayer : VodPlayerApi {
         val mp = mediaPlayer ?: return
         runCatching {
             val m = mp.marquee()
+            PlayerLog.mark("VLC marquee '${text.take(20)}'")
             m.setColour(color)
             m.setSize(20)
             m.setOpacity(220)
@@ -361,6 +380,7 @@ class VlcPlayer : VodPlayerApi {
             m.setPosition(position)
             m.setText(text)
             m.enable(true)
+            PlayerLog.done("marquee")
         }
     }
 
@@ -397,10 +417,12 @@ class VlcPlayer : VodPlayerApi {
         runCatching { mediaPlayer?.snapshots()?.get(48, 27) }.getOrNull()
 
     override fun release() {
+        PlayerLog.mark("VLC release")
         runCatching {
             mediaPlayer?.release()
             factory?.release()
         }
+        PlayerLog.done("release")
         mediaPlayer = null
         factory = null
         playing = false

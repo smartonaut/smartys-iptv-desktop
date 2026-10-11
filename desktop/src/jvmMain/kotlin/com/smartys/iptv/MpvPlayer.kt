@@ -271,7 +271,7 @@ class MpvPlayer : VodPlayerApi {
         (getDouble("volume") * 2.0).toInt()
 
     /** Multi-View: nur der aktive Stream hat Ton, die anderen sind stumm. */
-    fun setMuted(muted: Boolean) {
+    override fun setMuted(muted: Boolean) {
         handle?.let { MpvLib.INSTANCE.mpv_set_property_string(it, "mute", if (muted) "yes" else "no") }
     }
 

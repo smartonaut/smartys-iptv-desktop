@@ -30,6 +30,7 @@ interface VodPlayerApi {
     fun currentPositionMs(): Long
     fun durationMs(): Long
     fun setVolume(v: Int)
+    fun setMuted(muted: Boolean)
     fun setBrightness(b: Float)
     fun snapshot(): BufferedImage?
 

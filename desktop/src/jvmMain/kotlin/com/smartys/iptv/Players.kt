@@ -696,8 +696,10 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
 
 @Composable
 fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
-    // Plattform-Trennung: Windows = mpv, Linux = VLC (wie Live-TV).
-    val player = remember { if (isWindowsOS) MpvPlayer() else VlcPlayer() }
+    // VOD läuft auf VLC (wie Live-TV). 1.5.11: auch Windows — das mpv-Embedding
+    // frierte unter Windows strukturell ein (saubere DLL + erster Steuerbefehl
+    // = Bild/App tot). Linux-Verhalten unveraendert (VlcPlayer war dort aktiv).
+    val player = remember { VlcPlayer() }
     val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
     // Weiß-Screen-Fix (wie Live-TV): das VLC-Child-Fenster mappt WEISS bis
