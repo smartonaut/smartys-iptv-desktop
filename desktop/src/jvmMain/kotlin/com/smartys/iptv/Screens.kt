@@ -657,6 +657,20 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
 
 // ---------- Serien-Detail (Staffeln + Episoden + Download) ----------
 
+/** Episoden aus der Xtream-Antwort extrahieren. Die API liefert klassisch
+ *  ein `episodes`-Map (Staffelnummer -> Episoden); manche Server liefern
+ *  stattdessen eine `seasons`-Liste. Beides auf SeriesSeason normalisieren. */
+private fun SeriesInfo?.toSeasons(): List<SeriesSeason> {
+    val self = this ?: return emptyList()
+    if (!self.seasons.isNullOrEmpty()) return self.seasons
+    return self.episodes.orEmpty().entries
+        .sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }
+        .map { (season, list) ->
+            SeriesSeason(seasonNumber = season.toIntOrNull(),
+                         name = "Staffel $season", episodes = list)
+        }
+}
+
 @Composable
 fun SeriesDetailScreen(
     vm: DesktopViewModel,
@@ -695,7 +709,7 @@ fun SeriesDetailScreen(
                 // Start-Buttons: "Weiter schauen" auf die zuletztgesehene
                 // Episode (Auto-Resume) oder "Von vorne" ab Staffel 1 Folge 1.
                 val last = remember(show.seriesId, loading) { ResumeStore.seriesLast(show.seriesId) }
-                val allEps = remember(info) { (info?.seasons.orEmpty()).flatMap { it.episodes.orEmpty() } }
+                val allEps = remember(info) { info.toSeasons().flatMap { it.episodes.orEmpty() } }
                 if (loading) {
                     // noch keine Episodendaten — keine Buttons
                 } else if (allEps.isEmpty()) {
@@ -737,7 +751,7 @@ fun SeriesDetailScreen(
             if (loading) {
                 CenteredBox { CircularProgressIndicator(color = Accent) }
             } else {
-                val seasons = info?.seasons.orEmpty()
+                val seasons = info.toSeasons()
                 if (seasons.isEmpty()) {
                     CenteredBox { Text("Keine Episoden gefunden", color = TextMid) }
                 } else {
