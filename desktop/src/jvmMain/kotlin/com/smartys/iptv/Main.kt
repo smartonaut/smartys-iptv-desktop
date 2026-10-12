@@ -238,23 +238,28 @@ fun PairingScreen(vm: DesktopViewModel) {
     val clipboard = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
 
+    // Responsiv (User-Vorgabe "an die Auflösungsgröße anpassen"): bei kleinen
+    // Fenstern (< 640 dp hoch) kompakt skalieren statt Buttons abzuschneiden.
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val compact = maxHeight < 640.dp
+        val qrSize = if (compact) 130.dp else 180.dp
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().padding(if (compact) 12.dp else 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Smartys Player", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Accent)
+        Text("Smartys Player", fontSize = if (compact) 26.sp else 38.sp, fontWeight = FontWeight.Bold, color = Accent)
         Spacer(Modifier.height(4.dp))
         Text("Player freischalten", color = Color.Gray, fontSize = 15.sp)
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(if (compact) 10.dp else 28.dp))
 
         Column(
-            Modifier.background(Card, MaterialTheme.shapes.large).padding(horizontal = 36.dp, vertical = 22.dp),
+            Modifier.background(Card, MaterialTheme.shapes.large).padding(horizontal = if (compact) 20.dp else 36.dp, vertical = if (compact) 12.dp else 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Text("Deine Player-ID", color = TextMid, fontSize = 13.sp)
             Text(
-                playerId, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = TextHi,
+                playerId, fontSize = if (compact) 18.sp else 26.sp, fontWeight = FontWeight.Bold, color = TextHi,
                 modifier = Modifier.clickable {
                     clipboard.setText(AnnotatedString(playerId))
                     copied = "Player-ID kopiert"
@@ -263,7 +268,7 @@ fun PairingScreen(vm: DesktopViewModel) {
             Spacer(Modifier.height(14.dp))
             Text("Dein Passwort", color = TextMid, fontSize = 13.sp)
             Text(
-                pairingPw, fontSize = 26.sp, fontWeight = FontWeight.Bold, color = Accent,
+                pairingPw, fontSize = if (compact) 18.sp else 26.sp, fontWeight = FontWeight.Bold, color = Accent,
                 modifier = Modifier.clickable {
                     clipboard.setText(AnnotatedString(pairingPw))
                     copied = "Passwort kopiert"
@@ -277,22 +282,24 @@ fun PairingScreen(vm: DesktopViewModel) {
             // QR-Code: scannen statt abtippen (wie Tizen-Vorlage)
             QrCode(
                 "https://panel.smartys.tech/pair?mac=${CredStore.playerId()}&pw=${CredStore.pairingPw()}",
-                modifier = Modifier.size(180.dp).clip(RoundedCornerShape(10.dp))
-                    .background(Color.White).padding(10.dp)
+                modifier = Modifier.size(qrSize).clip(RoundedCornerShape(10.dp))
+                    .background(Color.White).padding(if (compact) 8.dp else 10.dp)
             )
             Spacer(Modifier.height(6.dp))
             Text("QR-Code mit dem Handy scannen", color = TextMid, fontSize = 12.sp)
         }
-        Spacer(Modifier.height(24.dp))
+        if (!compact) {
+            Spacer(Modifier.height(24.dp))
 
-        Text(
-            "1. Gehe auf panel.smartys.tech\n" +
-            "2. Melde dich mit Player-ID und Passwort an\n" +
-            "3. Hinterlege dort deine Playlist — danach hier auf „Prüfen“ klicken",
-            color = TextMid, fontSize = 15.sp,
-            lineHeight = 24.sp
-        )
-        Spacer(Modifier.height(22.dp))
+            Text(
+                "1. Gehe auf panel.smartys.tech\n" +
+                "2. Melde dich mit Player-ID und Passwort an\n" +
+                "3. Hinterlege dort deine Playlist — danach hier auf „Prüfen“ klicken",
+                color = TextMid, fontSize = 15.sp,
+                lineHeight = 24.sp
+            )
+        }
+        Spacer(Modifier.height(if (compact) 12.dp else 22.dp))
 
         if (busy) {
             CircularProgressIndicator(color = Accent)
@@ -325,6 +332,7 @@ fun PairingScreen(vm: DesktopViewModel) {
             Spacer(Modifier.height(8.dp))
             msg?.let { Text(it, color = TextMid, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp)) }
         }
+    }
     }
 }
 

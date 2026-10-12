@@ -234,6 +234,11 @@ class DesktopViewModel {
     /** Demo-Modus: legale öffentlich-rechtliche Sender ohne Pairing/Xtream abspielen. */
     fun startDemoMode() {
         state = AppState.Ready(listOf(DemoChannels.category()), DemoChannels.build())
+        // EPG ohne Xtream: freies Fallback-EPG (epg.pw) laden, nowNext() fällt
+        // bei Demo-Kanälen (epgChannelId=null) auf fallbackNowAndNext(name) zurück.
+        scope.launch {
+            if (XmltvEpg.loadFallback()) fallbackReady.value = true
+        }
     }
 
     /** Timeshift-URL: Archiv-Stream ab `startTs` (Unix-Sekunden). */
