@@ -657,12 +657,12 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
 
 // ---------- Serien-Detail (Staffeln + Episoden + Download) ----------
 
-/** Episoden aus der Xtream-Antwort extrahieren. Die API liefert klassisch
- *  ein `episodes`-Map (Staffelnummer -> Episoden); manche Server liefern
- *  stattdessen eine `seasons`-Liste. Beides auf SeriesSeason normalisieren. */
+/** Episoden aus der Xtream-Antwort extrahieren. WICHTIG: Die eigentlichen
+ *  Episoden stehen im `episodes`-Map (Staffelnummer -> Episoden). Das
+ *  `seasons`-Feld enthält nur Staffel-METADATEN (Cover, episode_count),
+ *  KEINE Episoden — deshalb immer das Map nutzen. */
 private fun SeriesInfo?.toSeasons(): List<SeriesSeason> {
     val self = this ?: return emptyList()
-    if (!self.seasons.isNullOrEmpty()) return self.seasons
     return self.episodes.orEmpty().entries
         .sortedBy { it.key.toIntOrNull() ?: Int.MAX_VALUE }
         .map { (season, list) ->
