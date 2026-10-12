@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 sealed class AppState {
     object Pairing : AppState()
     object Loading : AppState()
+    data class NeedsUnlock(val name: String) : AppState()
     data class Ready(val categories: List<Category>, val channels: List<LiveStream>) : AppState()
     data class Error(val message: String) : AppState()
 }
@@ -27,6 +28,9 @@ class DesktopViewModel {
 
     var state by mutableStateOf<AppState>(AppState.Pairing)
         private set
+
+    /** Verschlüsselte Panel-Payload, wartet auf die Passwort-Eingabe im Unlock-Screen. */
+    var pendingUnlock: SecCrypto.UnlockPayload? = null
 
     var creds by mutableStateOf<CredStore.Creds?>(null)
         private set
@@ -126,6 +130,28 @@ class DesktopViewModel {
         val respBody = org.json.JSONObject(pconn.inputStream.bufferedReader().readText())
         val providersArr = respBody.optJSONArray("providers") ?: org.json.JSONArray()
         if (providersArr.length() == 0) return@runCatching false
+
+        // Sicherheits-Passwort-Feature: Lines verschlüsselt (AES-256-GCM,
+        // PBKDF2 310k, AAD=Player-MAC) — Klartext-Parsing hier unmoeglich.
+        if (respBody.optBoolean("encrypted", false)) {
+            pendingUnlock = SecCrypto.UnlockPayload(
+                name = respBody.optString("name", "Player"),
+                saltB64 = respBody.optString("salt", ""),
+                iterations = respBody.optInt("iterations", 310000),
+                providers = (0 until providersArr.length()).map { i ->
+                    val p = providersArr.getJSONObject(i)
+                    SecCrypto.EncProvider(
+                        label = p.optString("label", ""),
+                        cipherServerUrl = p.optString("cipher_server_url", ""),
+                        cipherUsername = p.optString("cipher_username", ""),
+                        cipherPassword = p.optString("cipher_password", ""),
+                    )
+                }
+            )
+            state = AppState.NeedsUnlock(respBody.optString("name", "Player"))
+            return@runCatching true   // Pairing erfolgreich — Unlock folgt im eigenen Screen
+        }
+
         val providers = (0 until providersArr.length()).map { i ->
             val p = providersArr.getJSONObject(i)
             CredStore.Creds(p.getString("server_url"), p.getString("username"), p.getString("password"))
@@ -138,6 +164,39 @@ class DesktopViewModel {
         loadContent()
         true
     }.getOrDefault(false)
+
+    /**
+     * Unlock-Screen: verschluesselte Panel-Payload mit dem Sicherheits-Passwort
+     * entschlüsseln (lokal, PBKDF2 310k + AES-256-GCM). Bei falschem Passwort
+     * false (Felder bleiben leer, Backend-Vertrag).
+     */
+    fun unlockWithSecPw(password: String): Boolean {
+        val data = pendingUnlock ?: return false
+        val playerId = CredStore.playerId()
+        val key = SecCrypto.deriveKey(password, data.saltB64, data.iterations)
+        val provs = data.providers.map { ep ->
+            CredStore.Creds(
+                SecCrypto.decryptField(key, ep.cipherServerUrl, playerId),
+                SecCrypto.decryptField(key, ep.cipherUsername, playerId),
+                SecCrypto.decryptField(key, ep.cipherPassword, playerId),
+            )
+        }.filter { it.url.isNotBlank() && it.user.isNotBlank() }
+        if (provs.isEmpty()) return false
+        CredStore.saveProviders(provs)
+        creds = provs.first()
+        allProviders = provs
+        apis = provs.map { buildApi(it) }
+        api = apis.firstOrNull()
+        pendingUnlock = null
+        loadContent()
+        return true
+    }
+
+    /** Unlock abbrechen: zurueck zum Pairing-Screen, Payload verwerfen. */
+    fun cancelUnlock() {
+        pendingUnlock = null
+        state = AppState.Pairing
+    }
 
     private fun loadContent() {
         state = AppState.Loading

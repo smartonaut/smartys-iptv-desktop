@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.foundation.shape.RoundedCornerShape
 import javax.swing.SwingUtilities
 import kotlinx.coroutines.launch
@@ -89,6 +90,7 @@ fun App() {
         Box(Modifier.fillMaxSize().background(Bg)) {
             when (val s = vm.state) {
                 is AppState.Pairing -> PairingScreen(vm)
+                is AppState.NeedsUnlock -> UnlockScreen(vm, s.name)
                 is AppState.Loading -> CenteredBox { CircularProgressIndicator(color = Accent) }
                 is AppState.Error -> CenteredBox {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -333,6 +335,83 @@ fun PairingScreen(vm: DesktopViewModel) {
             msg?.let { Text(it, color = TextMid, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp)) }
         }
     }
+    }
+}
+
+// ---------- Unlock: verschlüsselte Lines entschlüsseln (Sicherheits-Passwort) ----------
+
+@Composable
+fun UnlockScreen(vm: DesktopViewModel, name: String) {
+    var pw by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Column(
+        Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text("Smartys Player", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Accent)
+        Spacer(Modifier.height(4.dp))
+        Text("Lines entschlüsseln", color = Color.Gray, fontSize = 15.sp)
+        Spacer(Modifier.height(28.dp))
+
+        Column(
+            Modifier.background(Card, MaterialTheme.shapes.large).padding(horizontal = 36.dp, vertical = 22.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(name, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextHi)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Deine Lines sind mit deinem\nSicherheits-Passwort verschlüsselt.",
+                color = TextMid, fontSize = 13.sp, lineHeight = 19.sp
+            )
+            Spacer(Modifier.height(16.dp))
+            OutlinedTextField(
+                value = pw,
+                onValueChange = { pw = it; error = false },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                label = { Text("Sicherheits-Passwort") },
+                isError = error,
+                modifier = Modifier.width(280.dp)
+            )
+            Spacer(Modifier.height(14.dp))
+            if (busy) {
+                CircularProgressIndicator(color = Accent)
+            } else {
+                Button(
+                    onClick = {
+                        busy = true; error = false
+                        scope.launch {
+                            val ok = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                vm.unlockWithSecPw(pw)   // PBKDF2 310k + AES-GCM, dauert ~1 s
+                            }
+                            busy = false
+                            error = !ok
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)
+                ) {
+                    Text("Entsperren — Playlist laden", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+            if (error) {
+                Spacer(Modifier.height(10.dp))
+                Text("Falsches Passwort — bitte erneut versuchen.", color = Color(0xFFE57373), fontSize = 13.sp)
+            }
+        }
+        Spacer(Modifier.height(20.dp))
+        Text(
+            "Passwort vergessen? Im Panel zurücksetzen (löscht alle Lines).",
+            color = TextMid, fontSize = 12.sp,
+            modifier = Modifier.clickable { vm.cancelUnlock() }
+        )
+        Spacer(Modifier.height(8.dp))
+        TextButton(onClick = { vm.cancelUnlock() }) {
+            Text("Zurück zur Einrichtung", color = TextMid, fontSize = 13.sp)
+        }
     }
 }
 
