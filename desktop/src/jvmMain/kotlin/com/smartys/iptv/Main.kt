@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.foundation.shape.RoundedCornerShape
 import javax.swing.SwingUtilities
 import kotlinx.coroutines.launch
 
@@ -272,6 +273,15 @@ fun PairingScreen(vm: DesktopViewModel) {
                 Spacer(Modifier.height(6.dp))
                 Text(it, color = Accent, fontSize = 12.sp)
             }
+            Spacer(Modifier.height(14.dp))
+            // QR-Code: scannen statt abtippen (wie Tizen-Vorlage)
+            QrCode(
+                "https://panel.smartys.tech/pair?mac=${CredStore.playerId()}&pw=${CredStore.pairingPw()}",
+                modifier = Modifier.size(180.dp).clip(RoundedCornerShape(10.dp))
+                    .background(Color.White).padding(10.dp)
+            )
+            Spacer(Modifier.height(6.dp))
+            Text("QR-Code mit dem Handy scannen", color = TextMid, fontSize = 12.sp)
         }
         Spacer(Modifier.height(24.dp))
 
@@ -303,6 +313,14 @@ fun PairingScreen(vm: DesktopViewModel) {
                 colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)
             ) {
                 Text("Prüfen — Playlist laden", Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.height(10.dp))
+            // Demo-Modus: sofort reinschauen ohne eigene Playlist
+            OutlinedButton(
+                onClick = { vm.startDemoMode() },
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent)
+            ) {
+                Text("Demo starten — ohne Einrichtung", Modifier.padding(horizontal = 22.dp, vertical = 4.dp), fontSize = 14.sp)
             }
             Spacer(Modifier.height(8.dp))
             msg?.let { Text(it, color = TextMid, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp)) }

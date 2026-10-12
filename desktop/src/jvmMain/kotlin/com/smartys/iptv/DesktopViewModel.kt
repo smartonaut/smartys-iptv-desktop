@@ -226,8 +226,14 @@ class DesktopViewModel {
     }
 
     fun streamUrlFor(channel: LiveStream): String? {
+        channel.directUrl?.let { return it }   // Demo-Modus: direkte URL ohne Xtream
         val c = allProviders.getOrNull(channel.providerIndex) ?: creds ?: return null
         return c.streamUrl(channel.streamId)
+    }
+
+    /** Demo-Modus: legale öffentlich-rechtliche Sender ohne Pairing/Xtream abspielen. */
+    fun startDemoMode() {
+        state = AppState.Ready(listOf(DemoChannels.category()), DemoChannels.build())
     }
 
     /** Timeshift-URL: Archiv-Stream ab `startTs` (Unix-Sekunden). */
