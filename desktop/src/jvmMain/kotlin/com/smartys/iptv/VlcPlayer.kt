@@ -427,6 +427,7 @@ class VlcPlayer : VodPlayerApi {
                 // ist. Beim Start ist er noch unsichtbar/1px — sonst landet die
                 // Karte oben links ueber der Tab-Leiste. Bis dahin: Retry-Timer.
                 val placed = positionOsd()
+                if (perPixelAlpha) runCatching { win.background = java.awt.Color(0, 0, 0, 0) }
                 win.isVisible = placed
                 if (!placed) {
                     osdPlaceTimer?.stop()
@@ -447,7 +448,7 @@ class VlcPlayer : VodPlayerApi {
                     osdHide = Timer(timeoutMs) { win.isVisible = false }
                         .apply { isRepeats = false; start() }
                 }
-                PlayerLog.log("OSD card: '${card.title.take(24)}' ${panel.preferredSize.width}x${panel.preferredSize.height} alpha=$perPixelAlpha placed=$placed")
+                PlayerLog.log("OSD card: '${card.title.take(24)}' ${panel.preferredSize.width}x${panel.preferredSize.height} alpha=$perPixelAlpha winAlpha=${runCatching { win.background?.alpha ?: -1 }.getOrDefault(-1)} placed=$placed")
             }.onFailure {
                 PlayerLog.log("OSD card FEHLER: ${it.javaClass.simpleName} ${it.message}")
             }
@@ -673,12 +674,19 @@ class VlcPlayer : VodPlayerApi {
         while (owner?.parent != null) owner = owner.parent
         if (owner !is java.awt.Window) return null
         val w = JWindow(owner)
+        // WICHTIG: Fenster-Transparenz MUSS vor dem Realisieren gesetzt werden.
+        // Wird sie danach gesetzt, bleibt das Fenster opak — dann sind die Ecken
+        // eckig (Rundung verschwindet im Fensterhintergrund) und das Video
+        // scheint nicht durch, obwohl isWindowTranslucencySupported() true sagt.
+        if (perPixelAlpha) runCatching { w.background = java.awt.Color(0, 0, 0, 0) }
+        runCatching { w.addNotify() }
+        if (perPixelAlpha) runCatching { w.background = java.awt.Color(0, 0, 0, 0) }
         val panel = OsdCardPanel(perPixelAlpha)
         panel.isOpaque = false
-        if (perPixelAlpha) {
-            runCatching { w.background = java.awt.Color(0, 0, 0, 0) }
+        (w.contentPane as? javax.swing.JComponent)?.let {
+            it.isOpaque = false
+            runCatching { it.background = java.awt.Color(0, 0, 0, 0) }
         }
-        (w.contentPane as? javax.swing.JComponent)?.isOpaque = false
         w.setLayout(java.awt.BorderLayout())
         w.add(panel, java.awt.BorderLayout.CENTER)
         w.setFocusableWindowState(false)
