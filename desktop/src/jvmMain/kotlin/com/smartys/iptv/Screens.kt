@@ -4,6 +4,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.*
@@ -69,6 +71,7 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
     // Kategorie-Verwaltung (User-Vorgabe: Sortierung + Ausblenden wie VOD):
     // Langdruck auf Kategorie -> Menü; catsVersion triggert Neu-Sortierung.
     var catMenuFor by remember { mutableStateOf<Category?>(null) }
+    var catMenuMulti by remember { mutableStateOf(false) }
     var catsVersion by remember { mutableStateOf(0) }
     val shownCats = remember(state.categories, catsVersion) { CategoryPrefs.applyTo("live", state.categories) }
 
@@ -104,8 +107,16 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                     fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth().combinedClickable(
                         onClick = { selectedCat = cat.id; favMode = false },
-                        onLongClick = { catMenuFor = cat }
+                        onLongClick = { catMenuMulti = false; catMenuFor = cat }
                     ).padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            item {
+                Text("🎯 Gruppen markieren",
+                    color = Accent, fontSize = 12.sp,
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        catMenuMulti = true
+                        catMenuFor = shownCats.firstOrNull()
+                    }.padding(horizontal = 16.dp, vertical = 10.dp))
             }
             val hiddenCats = state.categories.size - shownCats.size
             if (hiddenCats > 0) {
@@ -197,21 +208,18 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
         }
     }
 
-    // Kategorie-Langdruck-Menü (Sortierung/Ausblenden, User-Vorgabe)
+    // Kategorie-Langdruck-Menü (Sortierung/Ausblenden/Mehrfach-Markierung)
     catMenuFor?.let { cat ->
         CategoryMenuDialog(
+            scope = "live",
             cat = cat,
-            hiddenCount = state.categories.size - shownCats.size,
-            onDismiss = { catMenuFor = null },
-            onMoveUp = { CategoryPrefs.move("live", cat.id, shownCats, -1); catsVersion++; catMenuFor = null },
-            onMoveDown = { CategoryPrefs.move("live", cat.id, shownCats, 1); catsVersion++; catMenuFor = null },
-            onHide = {
-                CategoryPrefs.hide("live", cat.id)
-                if (selectedCat == cat.id) selectedCat = null
+            cats = state.categories,
+            startMulti = catMenuMulti,
+            onDismiss = { catMenuFor = null; catMenuMulti = false },
+            onChanged = {
                 catsVersion++
-                catMenuFor = null
-            },
-            onUnhideAll = { CategoryPrefs.unhideAll("live"); catsVersion++; catMenuFor = null }
+                if (selectedCat != null && CategoryPrefs.isHidden("live", selectedCat!!)) selectedCat = null
+            }
         )
     }
 
@@ -289,29 +297,138 @@ private fun ChannelRow(ch: LiveStream, vm: DesktopViewModel, isFav: Boolean, onT
 }
 
 @Composable
-private fun CategoryMenuDialog(
+fun CategoryMenuDialog(
+    scope: String,
     cat: Category,
-    hiddenCount: Int,
+    cats: List<Category>,
+    startMulti: Boolean = false,
     onDismiss: () -> Unit,
-    onMoveUp: () -> Unit,
-    onMoveDown: () -> Unit,
-    onHide: () -> Unit,
-    onUnhideAll: () -> Unit
+    onChanged: () -> Unit
 ) {
+    var mode by remember { mutableStateOf(if (startMulti) 1 else 0) }   // 0 = Einzel, 1 = Mehrfach
+    var marked by remember { mutableStateOf(setOf(cat.id)) }
+    var version by remember { mutableStateOf(0) }
+    val visible = remember(cats, version) { CategoryPrefs.applyTo(scope, cats) }
+    val hiddenCount = cats.size - visible.size
+
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Card,
-        title = { Text(cat.name, color = TextHi, fontSize = 18.sp) },
+        title = {
+            Text(
+                if (mode == 0) cat.name else "Gruppen markieren (${marked.size} gewählt)",
+                color = TextHi, fontSize = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis
+            )
+        },
         text = {
-            Column {
-                MenuItem("Nach oben verschieben", onMoveUp)
-                MenuItem("Nach unten verschieben", onMoveDown)
-                MenuItem("Ausblenden", onHide)
-                if (hiddenCount > 0) MenuItem("Alle ausgeblendeten einblenden", onUnhideAll)
+            when (mode) {
+                0 -> Column {
+                    MenuItem("▲ Nach oben verschieben") {
+                        CategoryPrefs.move(scope, cat.id, visible, -1); onChanged(); onDismiss()
+                    }
+                    MenuItem("▼ Nach unten verschieben") {
+                        CategoryPrefs.move(scope, cat.id, visible, 1); onChanged(); onDismiss()
+                    }
+                    MenuItem("🎯 Mehrere Gruppen markieren") { marked = setOf(cat.id); mode = 1 }
+                    MenuItem("🚫 Ausblenden") {
+                        CategoryPrefs.hide(scope, cat.id); onChanged(); onDismiss()
+                    }
+                    if (hiddenCount > 0) MenuItem("👁 Alle ausgeblendeten einblenden") {
+                        CategoryPrefs.unhideAll(scope); onChanged(); onDismiss()
+                    }
+                }
+                else -> Column {
+                    Text("Anklicken markiert. MARKIERT = BEHALTEN.", color = TextMid, fontSize = 13.sp)
+                    Spacer(Modifier.height(10.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniBtn("✅ Alle markieren") { marked = visible.map { it.id }.toSet() }
+                        MiniBtn("⬜ Aufheben") { marked = emptySet() }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniBtn("▲ Block nach oben") {
+                            if (marked.isNotEmpty()) {
+                                CategoryPrefs.moveBlock(scope, marked.toList(), cats, true); version++; onChanged()
+                            }
+                        }
+                        MiniBtn("▼ Block nach unten") {
+                            if (marked.isNotEmpty()) {
+                                CategoryPrefs.moveBlock(scope, marked.toList(), cats, false); version++; onChanged()
+                            }
+                        }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        MiniBtn("🚫 Nur markierte behalten", red = true) {
+                            val toHide = visible.filter { it.id !in marked }.map { it.id }
+                            if (toHide.isNotEmpty()) { CategoryPrefs.hideMany(scope, toHide); version++; onChanged() }
+                        }
+                        MiniBtn("🚫 Markierte ausblenden", red = true) {
+                            if (marked.isNotEmpty()) {
+                                CategoryPrefs.hideMany(scope, marked.toList()); version++; onChanged()
+                            }
+                        }
+                    }
+                    if (hiddenCount > 0) {
+                        Spacer(Modifier.height(8.dp))
+                        MiniBtn("👁 Alle einblenden") {
+                            CategoryPrefs.unhideAll(scope); version++; onChanged()
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text("Markiert: ${marked.size} von ${visible.size}", color = TextMid, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Column(
+                        Modifier.heightIn(max = 320.dp).verticalScroll(rememberScrollState())
+                    ) {
+                        visible.forEach { c ->
+                            val isMarked = c.id in marked
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isMarked) Card else Color.Transparent,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)
+                                    .clickable { marked = if (isMarked) marked - c.id else marked + c.id }
+                            ) {
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(if (isMarked) "☑" else "☐",
+                                        color = if (isMarked) Accent else TextMid, fontSize = 16.sp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Text(c.name,
+                                        color = if (isMarked) TextHi else TextMid,
+                                        fontSize = 14.sp,
+                                        fontWeight = if (isMarked) FontWeight.SemiBold else FontWeight.Normal,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                        }
+                    }
+                }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen", color = Accent) } }
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (mode == 1) "✓ Fertig" else "Schließen", color = Accent)
+            }
+        },
+        dismissButton = if (mode == 1) {
+            { TextButton(onClick = { marked = setOf(cat.id); mode = 0 }) { Text("← Zurück", color = TextMid) } }
+        } else null
     )
+}
+
+@Composable
+private fun MiniBtn(label: String, red: Boolean = false, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (red) Color(0xFF2A1A1A) else Card,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Text(label, color = if (red) Color(0xFFFF9B9B) else TextHi, fontSize = 12.sp,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp))
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -396,12 +513,15 @@ fun PinDialog(
 
 // ---------- Filme (VOD) ----------
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onOpenMovie: (VodStream) -> Unit) {
     LaunchedEffect(Unit) { if (vm.vodMovies.isEmpty()) vm.loadVod() }
 
     var selectedCat by remember { mutableStateOf<String?>(null) }
-    val shownCats = remember(vm.vodCategories) { CategoryPrefs.applyTo("movies", vm.vodCategories) }
+    var catMenuFor by remember { mutableStateOf<Category?>(null) }
+    var catsVersion by remember { mutableStateOf(0) }
+    val shownCats = remember(vm.vodCategories, catsVersion) { CategoryPrefs.applyTo("movies", vm.vodCategories) }
     val applied = remember(vm.vodMovies, selectedCat) {
         if (selectedCat == null) vm.vodMovies
         else vm.vodMovies.filter { it.categoryId == selectedCat }
@@ -429,7 +549,19 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
                     color = if (selectedCat == cat.id) Accent else TextMid,
                     fontWeight = if (selectedCat == cat.id) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 14.sp,
-                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = cat.id }.padding(horizontal = 16.dp, vertical = 8.dp))
+                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                        onClick = { selectedCat = cat.id },
+                        onLongClick = { catMenuFor = cat }
+                    ).padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            if (vm.vodCategories.size > shownCats.size) {
+                item {
+                    Text("⚙ ${vm.vodCategories.size - shownCats.size} ausgeblendet — verwalten",
+                        color = TextMid, fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            catMenuFor = vm.vodCategories.firstOrNull()
+                        }.padding(horizontal = 16.dp, vertical = 10.dp))
+                }
             }
         }
         Box(Modifier.weight(1f).padding(16.dp)) {
@@ -455,6 +587,14 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
                 }
             }
         }
+    }
+
+    catMenuFor?.let { cat ->
+        CategoryMenuDialog(
+            scope = "movies", cat = cat, cats = vm.vodCategories,
+            onDismiss = { catMenuFor = null },
+            onChanged = { catsVersion++; if (selectedCat != null && CategoryPrefs.isHidden("movies", selectedCat!!)) selectedCat = null }
+        )
     }
 }
 
@@ -605,12 +745,15 @@ private fun fmtPos(ms: Long): String {
 
 // ---------- Serien ----------
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
     LaunchedEffect(Unit) { if (vm.seriesShows.isEmpty()) vm.loadSeries() }
 
     var selectedCat by remember { mutableStateOf<String?>(null) }
-    val shownCats = remember(vm.seriesCategories) { CategoryPrefs.applyTo("series", vm.seriesCategories) }
+    var catMenuFor by remember { mutableStateOf<Category?>(null) }
+    var catsVersion by remember { mutableStateOf(0) }
+    val shownCats = remember(vm.seriesCategories, catsVersion) { CategoryPrefs.applyTo("series", vm.seriesCategories) }
     val applied = remember(vm.seriesShows, selectedCat) {
         if (selectedCat == null) vm.seriesShows
         else vm.seriesShows.filter { it.categoryId == selectedCat }
@@ -629,7 +772,19 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
                     color = if (selectedCat == cat.id) Accent else TextMid,
                     fontWeight = if (selectedCat == cat.id) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 14.sp,
-                    modifier = Modifier.fillMaxWidth().clickable { selectedCat = cat.id }.padding(horizontal = 16.dp, vertical = 8.dp))
+                    modifier = Modifier.fillMaxWidth().combinedClickable(
+                        onClick = { selectedCat = cat.id },
+                        onLongClick = { catMenuFor = cat }
+                    ).padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+            if (vm.seriesCategories.size > shownCats.size) {
+                item {
+                    Text("⚙ ${vm.seriesCategories.size - shownCats.size} ausgeblendet — verwalten",
+                        color = TextMid, fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            catMenuFor = vm.seriesCategories.firstOrNull()
+                        }.padding(horizontal = 16.dp, vertical = 10.dp))
+                }
             }
         }
         Box(Modifier.weight(1f).padding(16.dp)) {
@@ -652,6 +807,14 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
                 }
             }
         }
+    }
+
+    catMenuFor?.let { cat ->
+        CategoryMenuDialog(
+            scope = "series", cat = cat, cats = vm.seriesCategories,
+            onDismiss = { catMenuFor = null },
+            onChanged = { catsVersion++; if (selectedCat != null && CategoryPrefs.isHidden("series", selectedCat!!)) selectedCat = null }
+        )
     }
 }
 

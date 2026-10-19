@@ -468,12 +468,13 @@ class VlcPlayer : VodPlayerApi {
         if (owner !is java.awt.Window) return null
         val w = JWindow(owner)
         val label = JLabel()
-        label.foreground = java.awt.Color.WHITE
-        label.background = java.awt.Color(0f, 0f, 0f, 0.72f)
+        label.foreground = java.awt.Color(0xE8, 0xEE, 0xFC)
+        // Android-Stil: 40% alpha Dunkelblau #0b0e14 (statt 72% Schwarz).
+        label.background = java.awt.Color(0x0B / 255f, 0x0E / 255f, 0x14 / 255f, 0.40f)
         label.isOpaque = true
-        label.border = BorderFactory.createEmptyBorder(8, 16, 8, 16)
+        label.border = BorderFactory.createEmptyBorder(12, 20, 12, 20)
         label.horizontalAlignment = SwingConstants.CENTER
-        label.font = label.font.deriveFont(java.awt.Font.BOLD, 16f)
+        label.font = label.font.deriveFont(java.awt.Font.BOLD, 15f)
         w.contentPane.add(label)
         w.setFocusableWindowState(false)
         // 1.5.18: nie Fokus klauen — sonst bricht AWT-Vollbild sofort ab

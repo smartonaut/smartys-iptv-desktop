@@ -411,11 +411,14 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     val osdBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     fun showOsdNow() {
         if (osdBusy.getAndSet(true)) return
-        val (nowE, _) = XmltvEpg.getNowAndNext(ch.epgChannelId)
+        val (nowE, nextE) = XmltvEpg.getNowAndNext(ch.epgChannelId)
         val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
         val clock = fmt.format(Date())
         val epgTxt = if (nowE != null) {
-            "${nowE.title}  ${fmt.format(Date(nowE.start))}–${fmt.format(Date(nowE.stop))}"
+            "${fmt.format(Date(nowE.start))}  ${nowE.title}  ${fmt.format(Date(nowE.stop))}"
+        } else ""
+        val nextTxt = if (nextE != null) {
+            "Danach:  ${fmt.format(Date(nextE.start))}  ${nextE.title}"
         } else ""
         val prog = if (nowE != null && nowE.stop > nowE.start) {
             ((System.currentTimeMillis() - nowE.start).toFloat() /
@@ -425,9 +428,17 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         // Schlichter Balken: nur der gefüllte Teil (▬ = zusammenhängende
         // Linie), Rest bleibt unsichtbar — kein Karo-Muster, kein Kasten.
         val bar = "▬".repeat(filled)
-        val line1 = if (epgTxt.isBlank()) "${ch.name}   $clock"
-                    else "${ch.name} — $epgTxt   $clock"
-        player.showOsd("$line1\n$bar", 5000, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
+        // Android-Stil: Kanalname + Kategorie in Zeile 1, EPG in Zeile 2.
+        val cat = ch.categoryName.ifBlank { "" }
+        val line1 = if (cat.isBlank()) ch.name else "${ch.name}  ·  $cat"
+        val line2 = if (epgTxt.isBlank()) clock else "$epgTxt   $clock"
+        val lines = buildList {
+            add(line1)
+            add(line2)
+            add(bar)
+            if (nextTxt.isNotBlank()) add(nextTxt)
+        }
+        player.showOsd(lines.joinToString("\n"), 5000, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
         player.showLogo(true)
         thread {
             Thread.sleep(5200)

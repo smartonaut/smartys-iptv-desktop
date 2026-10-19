@@ -184,11 +184,45 @@ object CategoryPrefs {
         p.put("order", current.joinToString(","))
     }
 
+    /** Mehrere Kategorien als EIN Block um eine Position verschieben (interne Reihenfolge bleibt). */
+    fun moveBlock(scope: String, catIds: List<String>, cats: List<Category>, up: Boolean) {
+        if (catIds.isEmpty()) return
+        val p = prefs(scope)
+        val saved = p.get("order", "")!!.split(",").filter { it.isNotBlank() }
+        val ids = cats.map { it.id }
+        val list = (saved.filter { it in ids } + ids.filter { it !in saved }).toMutableList()
+        val sel = catIds.toSet()
+        val first = list.indexOfFirst { it in sel }
+        val last = list.indexOfLast { it in sel }
+        if (first < 0) return
+        if (first == last) { move(scope, catIds.first(), cats, if (up) -1 else 1); return }
+        val neighbor = if (up) first - 1 else last + 1
+        if (neighbor < 0 || neighbor >= list.size) return
+        val item = list.removeAt(neighbor)
+        list.add(if (up) last + 1 else first, item)
+        p.put("order", list.joinToString(","))
+    }
+
     fun hide(scope: String, catId: String) {
         val p = prefs(scope)
         val hidden = p.get("hidden", "")!!.split(",").filter { it.isNotBlank() }.toMutableSet()
         hidden.add(catId); p.put("hidden", hidden.joinToString(","))
     }
+
+    fun hideMany(scope: String, catIds: List<String>) {
+        if (catIds.isEmpty()) return
+        val p = prefs(scope)
+        val hidden = p.get("hidden", "")!!.split(",").filter { it.isNotBlank() }.toMutableSet()
+        hidden.addAll(catIds); p.put("hidden", hidden.joinToString(","))
+    }
+
+    fun unhideMany(scope: String, catIds: List<String>) {
+        if (catIds.isEmpty()) return
+        val p = prefs(scope)
+        val hidden = p.get("hidden", "")!!.split(",").filter { it.isNotBlank() }.toMutableSet()
+        hidden.removeAll(catIds.toSet()); p.put("hidden", hidden.joinToString(","))
+    }
+
 
     fun unhideAll(scope: String) { prefs(scope).put("hidden", "") }
     fun isHidden(scope: String, catId: String): Boolean =
