@@ -472,20 +472,35 @@ class VlcPlayer : VodPlayerApi {
         val cw = canvas.width
         val ch = canvas.height
         val dim = runCatching { mediaPlayer?.video()?.videoDimension() }.getOrNull()
+        val dimValid = dim != null && dim.width > 0 && dim.height > 0
         var picW = cw
         var picH = ch
-        if (dim != null && dim.width > 0 && dim.height > 0) {
-            val scale = minOf(cw.toDouble() / dim.width, ch.toDouble() / dim.height)
+        if (dimValid) {
+            val scale = minOf(cw.toDouble() / dim!!.width, ch.toDouble() / dim.height)
             picW = (dim.width * scale).toInt()
             picH = (dim.height * scale).toInt()
+        } else {
+            // libVLC liefert (noch) keine Videogroesse: typische Letterbox
+            // annehmen (Bild ~80 % der Canvas-Hoehe, oben/unten je 10 %).
+            picW = cw
+            picH = (ch * 0.80).toInt()
         }
         val picX = loc.x + (cw - picW) / 2
         val picY = loc.y + (ch - picH) / 2
         val x = (picX + 26).coerceAtMost(loc.x + cw - pref.width - 8)
         val y = (picY + picH - pref.height - 26).coerceAtLeast(picY + 8)
         win.setBounds(x, y, pref.width, pref.height)
+        // Diagnose: nur bei geaenderter Geometrie loggen (sonst spammt jede
+        // Mausbewegung das Log). Zeigt, ob videoDimension() wirklich greift.
+        val info = "canvas=${cw}x$ch video=${dim?.width}x${dim?.height} pic=${picW}x$picH y=$y"
+        if (info != lastPlaceLog) {
+            lastPlaceLog = info
+            PlayerLog.log("OSD place: $info")
+        }
         return true
     }
+
+    private var lastPlaceLog: String? = null
 
     /** Bei Fenster-Resize/Move (Vollbild-Wechsel) die sichtbare Karte nachziehen. */
     private var osdCanvasListener: java.awt.event.ComponentListener? = null
