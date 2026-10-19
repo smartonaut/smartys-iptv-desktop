@@ -457,7 +457,7 @@ class VlcPlayer : VodPlayerApi {
     private var osdPlaceTimer: Timer? = null
     private var osdPlaceAttempts = 0
 
-    /** Karte unten links ueber dem Video positionieren. false = Canvas noch nicht bereit. */
+    /** Karte unten links positionieren. false = Canvas noch nicht bereit. */
     private fun positionOsd(): Boolean {
         val canvas = videoCanvas ?: return false
         val win = osdWin ?: return false
@@ -465,11 +465,25 @@ class VlcPlayer : VodPlayerApi {
         if (!canvas.isShowing || canvas.width < 120 || canvas.height < 90) return false
         val pref = panel.preferredSize
         val loc = runCatching { canvas.locationOnScreen }.getOrNull() ?: return false
-        win.setBounds(
-            loc.x + 26,
-            loc.y + canvas.height - pref.height - 26,
-            pref.width, pref.height
-        )
+
+        // Sichtbaren Bildbereich bestimmen (Letterbox): libVLC kennt die
+        // Videogroesse. Sitzt die Karte im schwarzen Balken, sieht man weder
+        // Transparenz noch Eckenrundung — deshalb INS Bild legen.
+        val cw = canvas.width
+        val ch = canvas.height
+        val dim = runCatching { mediaPlayer?.video()?.videoDimension() }.getOrNull()
+        var picW = cw
+        var picH = ch
+        if (dim != null && dim.width > 0 && dim.height > 0) {
+            val scale = minOf(cw.toDouble() / dim.width, ch.toDouble() / dim.height)
+            picW = (dim.width * scale).toInt()
+            picH = (dim.height * scale).toInt()
+        }
+        val picX = loc.x + (cw - picW) / 2
+        val picY = loc.y + (ch - picH) / 2
+        val x = (picX + 26).coerceAtMost(loc.x + cw - pref.width - 8)
+        val y = (picY + picH - pref.height - 26).coerceAtLeast(picY + 8)
+        win.setBounds(x, y, pref.width, pref.height)
         return true
     }
 
