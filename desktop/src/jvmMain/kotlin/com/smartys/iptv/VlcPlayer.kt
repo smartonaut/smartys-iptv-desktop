@@ -381,38 +381,196 @@ class VlcPlayer : VodPlayerApi {
         mediaPlayer?.video()?.brightness() ?: 1.0f
 
     /**
-     * OSD direkt ins Videobild (libVLC Marquee). Im Gegensatz zu Compose-Overlays
-     * verschwindet das NICHT hinter dem heavyweight Video-Canvas — libVLC zeichnet
-     * es in den Frame. timeoutMs = 0 blendet nie automatisch aus.
+     * OSD-Karte im Android-Stil: dunkle Karte unten links mit Senderlogo,
+     * Titel, EPG-Zeile, Fortschrittsbalken und optionaler "Danach"-Zeile.
+     *
+     * WARUM KEIN VLC-FILTER: libVLC 3 hat das Marquee-Modul von "marquee" auf
+     * "marq" umbenannt; die vlcj-/libvlc-Aufrufe (libvlc_video_set_marquee_*)
+     * setzen weiterhin "marquee-*"-Variablen und laufen damit still ins Leere
+     * (kein Fehler, einfach kein OSD). Das Logo-Filter-API ist genauso
+     * unzuverlaessig. Deshalb zeichnet die App die Karte selbst — plattform-
+     * unabhaengig, mit Logo, echten Fonts und echtem Balken.
      */
+    data class OsdCard(
+        val title: String,
+        val sub: String = "",
+        val extra: String? = null,
+        val barPercent: Float? = null,
+        val logoPath: String? = null,
+    )
+
     override fun showOsd(text: String, timeoutMs: Int,
                 position: MarqueePosition,
                 color: java.awt.Color) {
-        // 1.5.12 Plattform-Split: Das VLC-Marquee verkeilt sich unter Windows
-        // im D3D-Video-Output (Beweis: app.log 1.5.11, 'marquee' ohne Rueckkehr,
-        // Bild+App tot bei schnellem Zweit-OSD). Linux laeuft sauber und bleibt
-        // beim Marquee. Windows bekommt ein reines Java-Overlay-Fenster ueber
-        // dem Canvas — KEINE native Calls, kann nicht deadlocken, klick-durchlaessig.
-        if (isWindows) { showOsdOverlay(text, timeoutMs, color); return }
-        val mp = mediaPlayer ?: return
-        runCatching {
-            val m = mp.marquee()
-            PlayerLog.mark("VLC marquee '${text.take(20)}'")
-            m.setColour(color)
-            m.setSize(20)
-            m.setOpacity(220)
-            m.setTimeout(timeoutMs)
-            m.setPosition(position)
-            m.setText(text)
-            m.enable(true)
-            PlayerLog.done("marquee")
+        val lines = text.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
+        showCard(
+            OsdCard(
+                title = lines.getOrNull(0) ?: "",
+                sub = lines.getOrNull(1) ?: "",
+                extra = lines.drop(2).joinToString("   ").ifBlank { null },
+            ),
+            timeoutMs
+        )
+    }
+
+    /** Karte anzeigen (unten links ueber dem Video). timeoutMs = 0: nie ausblenden. */
+    fun showCard(card: OsdCard, timeoutMs: Int = 5000) {
+        SwingUtilities.invokeLater {
+            runCatching {
+                val canvas = videoCanvas ?: return@runCatching
+                val win = ensureOsdWindow() ?: return@runCatching
+                val panel = osdPanel ?: return@runCatching
+                panel.logo = loadLogoImage(card.logoPath ?: logoPath)
+                panel.card = card
+                panel.revalidate()
+                val pref = panel.preferredSize
+                val loc = runCatching { canvas.locationOnScreen }.getOrNull() ?: return@runCatching
+                win.setBounds(
+                    loc.x + 26,
+                    loc.y + canvas.height - pref.height - 26,
+                    pref.width, pref.height
+                )
+                win.isVisible = true
+                if (isWindows) makeClickThrough(win)
+                if (timeoutMs > 0) {
+                    osdHide?.stop()
+                    osdHide = Timer(timeoutMs) { win.isVisible = false }
+                        .apply { isRepeats = false; start() }
+                }
+                PlayerLog.log("OSD card: '${card.title.take(24)}' ${pref.width}x${pref.height} alpha=$perPixelAlpha")
+            }.onFailure {
+                PlayerLog.log("OSD card FEHLER: ${it.javaClass.simpleName} ${it.message}")
+            }
         }
     }
 
-    // ---------------- Windows-OSD: Java-Overlay statt VLC-Filter ----------------
+    /** Senderlogo fuer die Karte (gecacht, wird pro Kanal neu geladen). */
+    private var logoPath: String? = null
+    private var logoPathCached: String? = null
+    private var logoImgCached: java.awt.image.BufferedImage? = null
+
+    private fun loadLogoImage(path: String?): java.awt.image.BufferedImage? {
+        if (path.isNullOrBlank()) return null
+        if (path == logoPathCached) return logoImgCached
+        val img = runCatching { javax.imageio.ImageIO.read(File(path)) }.getOrNull()
+        logoPathCached = path
+        logoImgCached = img
+        return img
+    }
+
+    /** Per-Pixel-Alpha (Wayland/XWayland oft nicht) — entscheidet nur, ob die
+     *  Karte transparente Ecken bekommt oder deckend dunkel gezeichnet wird. */
+    private val perPixelAlpha: Boolean by lazy {
+        runCatching {
+            java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment()
+                .defaultScreenDevice
+                .isWindowTranslucencySupported(
+                    java.awt.GraphicsDevice.WindowTranslucency.PERPIXEL_TRANSLUCENT)
+        }.getOrDefault(false)
+    }
+
+    /**
+     * Selbstgezeichnete OSD-Karte. Bewusst ohne JLabel/HTML: gerundete Karte,
+     * Logo links, Fettschrift fuer den Titel, duenner Balken in Akzentfarbe.
+     */
+    private class OsdCardPanel(private val alpha: Boolean) : javax.swing.JComponent() {
+
+        var card: OsdCard? = null
+        var logo: java.awt.image.BufferedImage? = null
+
+        private val padX = 20
+        private val padY = 15
+        private val logoSz = 46
+        private val gap = 14
+        private val barW = 300
+        private val barH = 5
+
+        private val fTitle = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 19)
+        private val fSub = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 14)
+        private val fExtra = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 13)
+
+        private fun w(s: String, f: java.awt.Font): Int = getFontMetrics(f).stringWidth(s)
+
+        override fun getPreferredSize(): java.awt.Dimension {
+            val c = card ?: return java.awt.Dimension(20, 20)
+            val wText = maxOf(
+                w(c.title, fTitle),
+                if (c.sub.isNotBlank()) w(c.sub, fSub) else 0,
+                if (!c.extra.isNullOrBlank()) w(c.extra, fExtra) else 0,
+                if (c.barPercent != null) barW else 0
+            )
+            var h = padY * 2 + getFontMetrics(fTitle).height
+            if (c.sub.isNotBlank()) h += 3 + getFontMetrics(fSub).height
+            if (c.barPercent != null) h += 9 + barH
+            if (!c.extra.isNullOrBlank()) h += 7 + getFontMetrics(fExtra).height
+            h = maxOf(h, padY * 2 + (if (logo != null) logoSz else 0))
+            val logoW = if (logo != null) logoSz + gap else 0
+            return java.awt.Dimension(padX * 2 + logoW + wText, h)
+        }
+
+        override fun paintComponent(gj: java.awt.Graphics) {
+            val c = card ?: return
+            val g = gj.create() as java.awt.Graphics2D
+            try {
+                g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,
+                    java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
+                g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                    java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                val ww = width - 1
+                val hh = height - 1
+                g.color = if (alpha) java.awt.Color(0x0B, 0x0E, 0x14, 200)
+                          else java.awt.Color(0x0B, 0x0E, 0x14)
+                g.fillRoundRect(0, 0, ww, hh, 16, 16)
+                g.color = java.awt.Color(255, 255, 255, if (alpha) 30 else 40)
+                g.stroke = java.awt.BasicStroke(1f)
+                g.drawRoundRect(0, 0, ww, hh, 16, 16)
+
+                var x = padX
+                logo?.let { img ->
+                    val scale = logoSz.toFloat() / maxOf(img.width, img.height)
+                    val lw = (img.width * scale).toInt().coerceAtLeast(1)
+                    val lh = (img.height * scale).toInt().coerceAtLeast(1)
+                    g.drawImage(img, x + (logoSz - lw) / 2, padY + (logoSz - lh) / 2, lw, lh, null)
+                    x += logoSz + gap
+                }
+
+                var y = padY + getFontMetrics(fTitle).ascent
+                g.font = fTitle
+                g.color = java.awt.Color(0xE8, 0xEE, 0xFC)
+                g.drawString(c.title, x, y)
+                if (c.sub.isNotBlank()) {
+                    y += 3 + getFontMetrics(fSub).height
+                    g.font = fSub
+                    g.color = java.awt.Color(0xA9, 0xBA, 0xD8)
+                    g.drawString(c.sub, x, y)
+                }
+                if (c.barPercent != null) {
+                    y += 9
+                    g.color = java.awt.Color(255, 255, 255, 45)
+                    g.fillRoundRect(x, y, barW, barH, barH, barH)
+                    val fw = (barW * c.barPercent.coerceIn(0f, 1f)).toInt()
+                    if (fw > 0) {
+                        g.color = java.awt.Color(0xFF, 0xC9, 0x4D)
+                        g.fillRoundRect(x, y, fw, barH, barH, barH)
+                    }
+                    y += barH
+                }
+                if (!c.extra.isNullOrBlank()) {
+                    y += 7 + getFontMetrics(fExtra).height
+                    g.font = fExtra
+                    g.color = java.awt.Color(0x8F, 0xA3, 0xC8)
+                    g.drawString(c.extra, x, y)
+                }
+            } finally {
+                g.dispose()
+            }
+        }
+    }
+
+    // ---------------- OSD-Fenster (selbstgezeichnete Karte) ----------------
 
     private var osdWin: JWindow? = null
-    private var osdLabel: JLabel? = null
+    private var osdPanel: OsdCardPanel? = null
     private var osdHide: Timer? = null
 
     /** user32 für WS_EX_TRANSPARENT (OSD + VLC-Video-Kindfenster). */
@@ -428,60 +586,32 @@ class VlcPlayer : VodPlayerApi {
         fun callback(hwnd: Long, lParam: Long): Boolean
     }
 
-    private fun showOsdOverlay(text: String, timeoutMs: Int, color: java.awt.Color) {
-        SwingUtilities.invokeLater {
-            runCatching {
-                PlayerLog.mark("OSD overlay '${text.take(20)}'")
-                val canvas = videoCanvas ?: return@runCatching
-                val win = ensureOsdWindow() ?: return@runCatching
-                val label = osdLabel ?: return@runCatching
-                label.text = "<html><div style='text-align:center'>${text.replace("\n", "<br>")}</div></html>"
-                label.foreground = color
-                val cs = canvas.size
-                val pref = label.preferredSize
-                val w = (pref.width + 36).coerceAtMost(cs.width - 24)
-                val h = pref.height + 18
-                val loc = runCatching { canvas.locationOnScreen }.getOrNull() ?: return@runCatching
-                win.setBounds(
-                    loc.x + (cs.width - w) / 2,
-                    loc.y + cs.height - h - 40,
-                    w, h
-                )
-                win.isVisible = true
-                makeClickThrough(win)
-                if (timeoutMs > 0) {
-                    osdHide?.stop()
-                    osdHide = Timer(timeoutMs) { win.isVisible = false }
-                        .apply { isRepeats = false; start() }
-                }
-                PlayerLog.done("OSD overlay")
-            }.onFailure { PlayerLog.log("OSD overlay FEHLER: ${it.javaClass.simpleName} ${it.message}") }
-        }
-    }
-
-    /** Einmalig das Overlay-Fenster erzeugen (Owner = Fenster des Canvas,
-     *  damit es im Z-Stack ueber dem Video bleibt). */
+    /**
+     * Einmalig das OSD-Fenster erzeugen (Owner = Fenster des Canvas, damit es
+     * im Z-Stack ueber dem Video bleibt). Die Karte zeichnet sich selbst; ist
+     * Per-Pixel-Alpha verfuegbar (X11), bekommen die Ecken Transparenz, sonst
+     * wird sie deckend dunkel gezeichnet (Wayland/XWayland).
+     */
     private fun ensureOsdWindow(): JWindow? {
-        if (osdWin != null) return osdWin
+        osdWin?.let { return it }
         var owner: java.awt.Container? = videoCanvas?.parent
         while (owner?.parent != null) owner = owner.parent
         if (owner !is java.awt.Window) return null
         val w = JWindow(owner)
-        val label = JLabel()
-        label.foreground = java.awt.Color(0xE8, 0xEE, 0xFC)
-        // Android-Stil: 40% alpha Dunkelblau #0b0e14 (statt 72% Schwarz).
-        label.background = java.awt.Color(0x0B / 255f, 0x0E / 255f, 0x14 / 255f, 0.40f)
-        label.isOpaque = true
-        label.border = BorderFactory.createEmptyBorder(12, 20, 12, 20)
-        label.horizontalAlignment = SwingConstants.CENTER
-        label.font = label.font.deriveFont(java.awt.Font.BOLD, 15f)
-        w.contentPane.add(label)
+        val panel = OsdCardPanel(perPixelAlpha)
+        panel.isOpaque = false
+        if (perPixelAlpha) {
+            runCatching { w.background = java.awt.Color(0, 0, 0, 0) }
+        }
+        (w.contentPane as? javax.swing.JComponent)?.isOpaque = false
+        w.setLayout(java.awt.BorderLayout())
+        w.add(panel, java.awt.BorderLayout.CENTER)
         w.setFocusableWindowState(false)
         // 1.5.18: nie Fokus klauen — sonst bricht AWT-Vollbild sofort ab
         w.setAutoRequestFocus(false)
         w.isVisible = false
         osdWin = w
-        osdLabel = label
+        osdPanel = panel
         return w
     }
 
@@ -559,28 +689,21 @@ class VlcPlayer : VodPlayerApi {
         }
     }
 
-    /** Senderlogo als VLC-Logo-Overlay (ins Videobild, links unten).
-     *  Windows 1.5.12: no-op — der Logo-Filter ist dieselbe Deadlock-Klasse
-     *  wie Marquee (VLC-Filter-Churn im D3D-Output). Kosmetik entfaellt dort. */
+    /**
+     * Senderlogo fuer die OSD-Karte merken. Der VLC-Logofilter wird NICHT mehr
+     * benutzt: unter VLC 3 unzuverlaessig (eigene API-Variablennamen) und er
+     * wuerde das Logo doppelt zeichnen, weil es jetzt in der Karte steckt.
+     */
     fun setLogo(path: String?) {
-        if (isWindows) return
-        val mp = mediaPlayer ?: return
-        if (path == null || path.isBlank()) {
-            mp.logo().enable(false)
-            return
-        }
-        runCatching {
-            mp.logo().setFile(path)
-            mp.logo().setPosition(uk.co.caprica.vlcj.player.base.LogoPosition.BOTTOM_LEFT)
-            mp.logo().setOpacity(0.95f)
-        }
+        logoPath = path
+        // Cache verwerfen, damit das neue Logo wirklich geladen wird.
+        logoPathCached = null
+        logoImgCached = null
     }
 
-    /** Logo ein-/ausblenden (zusammen mit dem OSD). */
-    fun showLogo(v: Boolean) {
-        if (isWindows) return
-        runCatching { mediaPlayer?.logo()?.enable(v) }
-    }
+    /** API-Paritaet: Logo steckt jetzt in der OSD-Karte (showCard). */
+    @Suppress("UNUSED_PARAMETER")
+    fun showLogo(v: Boolean) { /* bewusst ohne Wirkung */ }
 
     /** Relatives Spulen (±ms) — für Timeshift im Archiv-Stream. */
     fun seekBy(deltaMs: Long) {
@@ -588,14 +711,10 @@ class VlcPlayer : VodPlayerApi {
     }
 
     fun hideOsd() {
-        if (isWindows) {
-            SwingUtilities.invokeLater {
-                osdHide?.stop()
-                osdWin?.isVisible = false
-            }
-            return
+        SwingUtilities.invokeLater {
+            osdHide?.stop()
+            osdWin?.isVisible = false
         }
-        runCatching { mediaPlayer?.marquee()?.enable(false) }
     }
 
     /** Frame-Grab für die Abspann-Erkennung (Downsample 48×27). */
@@ -608,11 +727,11 @@ class VlcPlayer : VodPlayerApi {
             mediaPlayer?.release()
             factory?.release()
         }
-        if (isWindows) SwingUtilities.invokeLater {
+        SwingUtilities.invokeLater {
             osdHide?.stop()
             osdWin?.dispose()
             osdWin = null
-            osdLabel = null
+            osdPanel = null
         }
         PlayerLog.done("release")
         mediaPlayer = null

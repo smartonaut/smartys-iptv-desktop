@@ -404,50 +404,41 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     // Bis dahin läuft der Canvas unsichtbar (1px) und der Compose-
     // Lade-Indikator bleibt stehen.
     var videoReady by remember { mutableStateOf(false) }
-    // OSD: Marquee (Text + Laufzeitbalken) + Senderlogo als VLC-Overlay DIREKT
-    // ins Videobild — kein separates Fenster (JWindow-Transparenz scheitert
-    // unter XWayland), dadurch automatisch mit dem Bild skaliert und echt
-    // "transparent". Einmal zeigen für 5 s, weitere Bewegungen ignorieren.
+    // OSD-Karte (Java2D, selbstgezeichnet): Senderlogo + Sender/Kategorie +
+    // EPG-Slot + echter Fortschrittsbalken + "Danach"-Zeile. Kein VLC-Filter
+    // (unter VLC 3 unzuverlaessig), daher plattformunabhaengig identisch.
     val osdBusy = java.util.concurrent.atomic.AtomicBoolean(false)
     fun showOsdNow() {
         if (osdBusy.getAndSet(true)) return
         val (nowE, nextE) = XmltvEpg.getNowAndNext(ch.epgChannelId)
         val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
         val clock = fmt.format(Date())
-        val epgTxt = if (nowE != null) {
-            "${fmt.format(Date(nowE.start))}  ${nowE.title}  ${fmt.format(Date(nowE.stop))}"
-        } else ""
-        val nextTxt = if (nextE != null) {
-            "Danach:  ${fmt.format(Date(nextE.start))}  ${nextE.title}"
-        } else ""
         val prog = if (nowE != null && nowE.stop > nowE.start) {
             ((System.currentTimeMillis() - nowE.start).toFloat() /
                 (nowE.stop - nowE.start)).coerceIn(0f, 1f)
-        } else 0f
-        val filled = (prog * 24).toInt().coerceIn(0, 24)
-        // Schlichter Balken: nur der gefüllte Teil (▬ = zusammenhängende
-        // Linie), Rest bleibt unsichtbar — kein Karo-Muster, kein Kasten.
-        val bar = "▬".repeat(filled)
-        // Android-Stil: Kanalname + Kategorie in Zeile 1, EPG in Zeile 2.
+        } else null
+        val epgTxt = if (nowE != null) {
+            "${fmt.format(Date(nowE.start))}  ${nowE.title}  –  ${fmt.format(Date(nowE.stop))}   $clock"
+        } else clock
         val cat = ch.categoryName.ifBlank { "" }
-        val line1 = if (cat.isBlank()) ch.name else "${ch.name}  ·  $cat"
-        val line2 = if (epgTxt.isBlank()) clock else "$epgTxt   $clock"
-        val lines = buildList {
-            add(line1)
-            add(line2)
-            add(bar)
-            if (nextTxt.isNotBlank()) add(nextTxt)
-        }
-        player.showOsd(lines.joinToString("\n"), 5000, MarqueePosition.BOTTOM, java.awt.Color.WHITE)
-        player.showLogo(true)
+        val sub = if (cat.isBlank()) epgTxt else "$cat   ·   $epgTxt"
+        val nextTxt = nextE?.let { "Danach:  ${fmt.format(Date(it.start))}  ${it.title}" }
+        player.showCard(
+            VlcPlayer.OsdCard(
+                title = ch.name,
+                sub = sub,
+                extra = nextTxt,
+                barPercent = prog,
+            ),
+            5000
+        )
         thread {
             Thread.sleep(5200)
-            player.showLogo(false)
             osdBusy.set(false)
         }
     }
 
-    // Senderlogo laden (einmal pro Kanal) und als VLC-Logo-Overlay setzen.
+    // Senderlogo laden (einmal pro Kanal) — landet links in der OSD-Karte.
     DisposableEffect(Unit) {
         val icon = ch.streamIcon
         if (!icon.isNullOrBlank()) {
