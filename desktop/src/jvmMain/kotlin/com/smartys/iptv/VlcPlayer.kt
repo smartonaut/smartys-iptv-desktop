@@ -34,6 +34,11 @@ class VlcPlayer : VodPlayerApi {
     private var factory: MediaPlayerFactory? = null
     private var mediaPlayer: EmbeddedMediaPlayer? = null
 
+    /** true, sobald release() den nativen Player freigegeben hat — ein noch
+     *  laufender OSD-Timer darf danach NICHT mehr auf logo() zugreifen
+     *  (sonst SIGSEGV in libvlccore). */
+    @Volatile private var playerReleased = false
+
     @Volatile
     var playing: Boolean = false
         private set
@@ -278,6 +283,7 @@ class VlcPlayer : VodPlayerApi {
             })
             factory = f
             this.mediaPlayer = mp
+            playerReleased = false
             true
         }.getOrDefault(false)
     }
@@ -340,6 +346,11 @@ class VlcPlayer : VodPlayerApi {
     override fun stop() {
         PlayerLog.mark("VLC stop")
         currentUrl = null
+        // OSD-Overlay-Timer sofort abbrechen und Logo-Filter abschalten, solange
+        // der native Player noch lebt — sonst feuert der Timer nach release().
+        osdOverlayTimer?.stop()
+        osdOverlayTimer = null
+        runCatching { mediaPlayer?.logo()?.enable(false) }
         mediaPlayer?.controls()?.stop()
         playing = false
         PlayerLog.done("stop")
@@ -531,7 +542,10 @@ class VlcPlayer : VodPlayerApi {
         if (timeoutMs > 0) {
             osdOverlayTimer?.stop()
             osdOverlayTimer = Timer(timeoutMs) {
-                runCatching { mp.logo().enable(false) }
+                // Guard: Player könnte zwischenzeitlich freigegeben sein.
+                if (!playerReleased && mediaPlayer === mp) {
+                    runCatching { mp.logo().enable(false) }
+                }
             }.apply { isRepeats = false; start() }
         }
         return true
@@ -593,10 +607,33 @@ class VlcPlayer : VodPlayerApi {
     private fun loadLogoImage(path: String?): java.awt.image.BufferedImage? {
         if (path.isNullOrBlank()) return null
         if (path == logoPathCached) return logoImgCached
-        val img = runCatching { javax.imageio.ImageIO.read(File(path)) }.getOrNull()
+        val raw = runCatching { javax.imageio.ImageIO.read(File(path)) }.getOrNull()
+        // Auf sichtbaren Inhalt zuschneiden: Xtream-Logos sind meist 100x100 mit
+        // transparenten Rändern — der eigentliche Schriftzug nur ein dünnes Band.
+        // Ohne Trim skaliert die Karte die Rohgröße (100x100) und das Logo bleibt
+        // winzig, egal wie groß die Box ist.
+        val img = raw?.let { trimTransparent(it) }
         logoPathCached = path
         logoImgCached = img
         return img
+    }
+
+    /** Nicht-transparente Bounding-Box — schneidet transparente Ränder ab. */
+    private fun trimTransparent(src: java.awt.image.BufferedImage): java.awt.image.BufferedImage {
+        var minX = src.width; var minY = src.height; var maxX = -1; var maxY = -1
+        for (y in 0 until src.height) for (x in 0 until src.width) {
+            val a = (src.getRGB(x, y) ushr 24) and 0xFF
+            if (a > 16) {
+                if (x < minX) minX = x
+                if (y < minY) minY = y
+                if (x > maxX) maxX = x
+                if (y > maxY) maxY = y
+            }
+        }
+        if (maxX < minX || maxY < minY) return src
+        val w = maxX - minX + 1; val h = maxY - minY + 1
+        if (w == src.width && h == src.height) return src
+        return src.getSubimage(minX, minY, w, h)
     }
 
     /** Per-Pixel-Alpha (Wayland/XWayland oft nicht) — entscheidet nur, ob die
@@ -621,14 +658,14 @@ class VlcPlayer : VodPlayerApi {
 
         private val padX = 20
         private val padY = 15
-        private val logoBoxW = 152
-        private val logoBoxH = 60
+        private val logoBoxW = 184
+        private val logoBoxH = 72
         private val gap = 14
         private val barH = 5
 
-        private val fTitle = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 19)
-        private val fSub = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 15)
-        private val fExtra = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 14)
+        private val fTitle = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 24)
+        private val fSub = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 19)
+        private val fExtra = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 17)
 
         private fun w(s: String, f: java.awt.Font): Int = getFontMetrics(f).stringWidth(s)
 
@@ -660,6 +697,12 @@ class VlcPlayer : VodPlayerApi {
                     java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
                 g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
                     java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                // Fractional metrics + reine Striche: Buchstabenabstände und
+                // Kurven bleiben glatt statt an Pixelkanten auszufransen.
+                g.setRenderingHint(java.awt.RenderingHints.KEY_FRACTIONALMETRICS,
+                    java.awt.RenderingHints.VALUE_FRACTIONALMETRICS_ON)
+                g.setRenderingHint(java.awt.RenderingHints.KEY_STROKE_CONTROL,
+                    java.awt.RenderingHints.VALUE_STROKE_PURE)
                 // Logo wird skaliert gezeichnet — ohne bikubische Interpolation
                 // wirkt die kleine Schrift im Senderlogo pixelig.
                 g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
@@ -916,6 +959,12 @@ class VlcPlayer : VodPlayerApi {
 
     override fun release() {
         PlayerLog.mark("VLC release")
+        // Timer VOR dem Freigeben des nativen Players stoppen — ein noch
+        // laufender OSD-Timer würde sonst logo().enable(false) auf freigegebenem
+        // Speicher rufen (SIGSEGV in libvlccore: vlc_vaLog -> pthread_rwlock).
+        playerReleased = true
+        osdOverlayTimer?.stop(); osdOverlayTimer = null
+        vlcCtTimer?.stop(); vlcCtTimer = null
         runCatching {
             mediaPlayer?.release()
             factory?.release()

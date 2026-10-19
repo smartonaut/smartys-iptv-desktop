@@ -243,6 +243,10 @@ object CategoryPrefs {
     fun unhideAll(scope: String) { prefs(scope).put("hidden", "") }
     fun isHidden(scope: String, catId: String): Boolean =
         prefs(scope).get("hidden", "")!!.split(",").filter { it.isNotBlank() }.contains(catId)
+
+    /** IDs der ausgeblendeten Gruppen (für die Kanal-Filterung in "Alle Kanäle"). */
+    fun hiddenIds(scope: String, cats: List<Category>): Set<String> =
+        cats.filter { isHidden(scope, it.id) }.map { it.id }.toSet()
 }
 
 // ---------- Kanal-Verwaltung (Live-TV) ----------

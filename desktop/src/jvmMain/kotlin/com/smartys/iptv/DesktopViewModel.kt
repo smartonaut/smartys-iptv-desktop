@@ -277,6 +277,17 @@ class DesktopViewModel {
                     allCats.addAll(cats)
                 }
                 val clean = all.filter { !it.name.contains("####") }
+                // Mehrere Lines liefern dieselben Gruppennamen mit verschiedenen
+                // category_id. Kanäle auf die kanonische id je Gruppe normalisieren,
+                // damit jede Gruppe nur EINMAL erscheint und ein Klick auf die
+                // Gruppe alle Kanäle über alle Lines zusammen zeigt.
+                val canonBy = linkedMapOf<String, String>()   // Name(lower) -> erste id
+                allCats.forEach { canonBy.putIfAbsent(it.name.trim().lowercase(), it.id) }
+                clean.forEach { ch ->
+                    val key = ch.categoryName.trim().lowercase()
+                    if (key.isNotEmpty()) canonBy[key]?.let { ch.categoryId = it }
+                }
+                val dedupCats = allCats.distinctBy { it.name.trim().lowercase() }
                 // Profil an eine Line gebunden? Dann nur deren Kanäle + Kategorien
                 // zeigen. Ohne Bindung bleibt das bisherige Verhalten (alle Lines
                 // zusammengeführt, Wiedergabe je Kanal über providerIndex).
@@ -284,9 +295,9 @@ class DesktopViewModel {
                 if (bIdx != null) {
                     val chs = clean.filter { it.providerIndex == bIdx }
                     val catIds = chs.map { it.categoryId }.toSet()
-                    state = AppState.Ready(allCats.filter { it.id in catIds }, chs)
+                    state = AppState.Ready(dedupCats.filter { it.id in catIds }, chs)
                 } else {
-                    state = AppState.Ready(allCats, clean)
+                    state = AppState.Ready(dedupCats, clean)
                 }
                 // EPG + VOD/Serien laden
                 loadXmltvEpg()

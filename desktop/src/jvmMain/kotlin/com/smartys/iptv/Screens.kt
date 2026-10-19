@@ -79,11 +79,16 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
     val shownCats = remember(state.categories, catsVersion, vm.activeProfileId) {
         CategoryPrefs.applyTo("live", state.categories)
     }
+    // Ausgeblendete Gruppen: deren Sender dürfen auch in "Alle Kanäle" nicht
+    // auftauchen (vorher verschwand nur die Sidebar-Gruppe, die Sender blieben).
+    val hiddenCatIds = remember(state.categories, catsVersion, vm.activeProfileId) {
+        CategoryPrefs.hiddenIds("live", state.categories)
+    }
 
-    val applied = remember(state.channels, selectedCat, favMode, vm.favorites, sortMode) {
+    val applied = remember(state.channels, selectedCat, favMode, vm.favorites, sortMode, hiddenCatIds) {
         var list = when {
             favMode -> state.channels.filter { it.streamId in vm.favorites }
-            selectedCat == null -> state.channels
+            selectedCat == null -> state.channels.filter { it.categoryId !in hiddenCatIds }
             else -> state.channels.filter { it.categoryId == selectedCat }
         }
         ChannelPrefs.apply(list)

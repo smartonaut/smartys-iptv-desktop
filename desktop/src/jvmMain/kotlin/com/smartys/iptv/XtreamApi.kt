@@ -45,7 +45,7 @@ data class LiveStream(
     @SerializedName("stream_icon") val streamIcon: String?,
     @SerializedName("epg_channel_id") val epgChannelId: String?,
     @SerializedName("added") val added: String?,
-    @SerializedName("category_id") val categoryId: String,
+    @SerializedName("category_id") var categoryId: String,
     @SerializedName("tv_archive") val tvArchive: Int? = null,
     @SerializedName("tv_archive_duration") val tvArchiveDuration: Int? = null
 ) {
