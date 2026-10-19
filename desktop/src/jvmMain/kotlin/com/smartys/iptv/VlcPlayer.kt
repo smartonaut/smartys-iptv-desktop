@@ -668,8 +668,8 @@ class VlcPlayer : VodPlayerApi {
                 val rw = ww - inset * 2f - 1f
                 val rh = hh - inset * 2f - 1f
                 val radius = 14f
-                g.color = if (alpha) java.awt.Color(0x0C, 0x14, 0x24, 110)
-                          else java.awt.Color(0x0C, 0x14, 0x24)
+                g.color = if (alpha) java.awt.Color(0x0B, 0x13, 0x22, 180)
+                          else java.awt.Color(0x0B, 0x13, 0x22)
                 g.fillRoundRect(inset.toInt(), inset.toInt(), rw.toInt(), rh.toInt(),
                     radius.toInt(), radius.toInt())
                 g.color = java.awt.Color(255, 255, 255, if (alpha) 26 else 34)
@@ -688,14 +688,20 @@ class VlcPlayer : VodPlayerApi {
                     x += logoBoxW + gap
                 }
 
+                // Text mit 1px-Schatten: lesbar auch über hellen Bildstellen
+                // (Karte ist halbtransparent — Kontrast kommt aus dem Schatten).
                 var y = padY + getFontMetrics(fTitle).ascent
                 g.font = fTitle
-                g.color = java.awt.Color(0xE8, 0xEE, 0xFC)
+                g.color = java.awt.Color(0, 0, 0, 170)
+                g.drawString(c.title, x, y + 1)
+                g.color = java.awt.Color(0xEE, 0xF3, 0xFF)
                 g.drawString(c.title, x, y)
                 if (c.sub.isNotBlank()) {
                     y += 3 + getFontMetrics(fSub).height
                     g.font = fSub
-                    g.color = java.awt.Color(0xA9, 0xBA, 0xD8)
+                    g.color = java.awt.Color(0, 0, 0, 170)
+                    g.drawString(c.sub, x, y + 1)
+                    g.color = java.awt.Color(0xDC, 0xE6, 0xF6)
                     g.drawString(c.sub, x, y)
                 }
                 if (c.barPercent != null) {
@@ -713,7 +719,9 @@ class VlcPlayer : VodPlayerApi {
                 if (!c.extra.isNullOrBlank()) {
                     y += 7 + getFontMetrics(fExtra).height
                     g.font = fExtra
-                    g.color = java.awt.Color(0x8F, 0xA3, 0xC8)
+                    g.color = java.awt.Color(0, 0, 0, 170)
+                    g.drawString(c.extra, x, y + 1)
+                    g.color = java.awt.Color(0xC8, 0xD5, 0xE9)
                     g.drawString(c.extra, x, y)
                 }
             } finally {
