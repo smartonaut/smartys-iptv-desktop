@@ -420,8 +420,9 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         val epgTxt = if (nowE != null) {
             "${fmt.format(Date(nowE.start))}  ${nowE.title}  –  ${fmt.format(Date(nowE.stop))}   ·   $clock"
         } else clock
-        val cat = ch.categoryName.ifBlank { "" }
-        val sub = if (cat.isBlank()) epgTxt else "$cat   ·   $epgTxt"
+        // Gruppe/Kategorie steht nicht mehr im OSD — die Zeile zeigt nur die
+        // EPG-Daten (Start, Titel, Ende, Uhrzeit).
+        val sub = epgTxt
         val nextTxt = nextE?.let { "Danach:  ${fmt.format(Date(it.start))}  ${it.title}" }
         player.showCard(
             VlcPlayer.OsdCard(
