@@ -627,8 +627,8 @@ class VlcPlayer : VodPlayerApi {
         private val barH = 5
 
         private val fTitle = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 19)
-        private val fSub = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 14)
-        private val fExtra = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 13)
+        private val fSub = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 15)
+        private val fExtra = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.PLAIN, 14)
 
         private fun w(s: String, f: java.awt.Font): Int = getFontMetrics(f).stringWidth(s)
 
@@ -697,11 +697,11 @@ class VlcPlayer : VodPlayerApi {
                 g.color = java.awt.Color(0xEE, 0xF3, 0xFF)
                 g.drawString(c.title, x, y)
                 if (c.sub.isNotBlank()) {
-                    y += 3 + getFontMetrics(fSub).height
+                    y += 5 + getFontMetrics(fSub).height
                     g.font = fSub
                     g.color = java.awt.Color(0, 0, 0, 170)
                     g.drawString(c.sub, x, y + 1)
-                    g.color = java.awt.Color(0xDC, 0xE6, 0xF6)
+                    g.color = java.awt.Color(0xFF, 0xD7, 0x70)
                     g.drawString(c.sub, x, y)
                 }
                 if (c.barPercent != null) {
@@ -721,7 +721,7 @@ class VlcPlayer : VodPlayerApi {
                     g.font = fExtra
                     g.color = java.awt.Color(0, 0, 0, 170)
                     g.drawString(c.extra, x, y + 1)
-                    g.color = java.awt.Color(0xC8, 0xD5, 0xE9)
+                    g.color = java.awt.Color(0xD3, 0xDE, 0xEE)
                     g.drawString(c.extra, x, y)
                 }
             } finally {
