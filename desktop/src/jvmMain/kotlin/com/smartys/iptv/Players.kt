@@ -418,7 +418,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 (nowE.stop - nowE.start)).coerceIn(0f, 1f)
         } else null
         val epgTxt = if (nowE != null) {
-            "${fmt.format(Date(nowE.start))}  ${nowE.title}  –  ${fmt.format(Date(nowE.stop))}   $clock"
+            "${fmt.format(Date(nowE.start))}  ${nowE.title}  –  ${fmt.format(Date(nowE.stop))}   ·   $clock"
         } else clock
         val cat = ch.categoryName.ifBlank { "" }
         val sub = if (cat.isBlank()) epgTxt else "$cat   ·   $epgTxt"

@@ -417,32 +417,64 @@ class VlcPlayer : VodPlayerApi {
     fun showCard(card: OsdCard, timeoutMs: Int = 5000) {
         SwingUtilities.invokeLater {
             runCatching {
-                val canvas = videoCanvas ?: return@runCatching
                 val win = ensureOsdWindow() ?: return@runCatching
                 val panel = osdPanel ?: return@runCatching
                 panel.logo = loadLogoImage(card.logoPath ?: logoPath)
                 panel.card = card
                 panel.revalidate()
-                val pref = panel.preferredSize
-                val loc = runCatching { canvas.locationOnScreen }.getOrNull() ?: return@runCatching
-                win.setBounds(
-                    loc.x + 26,
-                    loc.y + canvas.height - pref.height - 26,
-                    pref.width, pref.height
-                )
-                win.isVisible = true
+
+                // Position erst setzen, wenn der Video-Canvas wirklich laid out
+                // ist. Beim Start ist er noch unsichtbar/1px — sonst landet die
+                // Karte oben links ueber der Tab-Leiste. Bis dahin: Retry-Timer.
+                val placed = positionOsd()
+                win.isVisible = placed
+                if (!placed) {
+                    osdPlaceTimer?.stop()
+                    osdPlaceAttempts = 0
+                    osdPlaceTimer = Timer(150) {
+                        osdPlaceAttempts++
+                        if (positionOsd()) {
+                            win.isVisible = true
+                            osdPlaceTimer?.stop()
+                        } else if (osdPlaceAttempts >= 20) {
+                            osdPlaceTimer?.stop()   // Canvas kam nie -> aufgeben
+                        }
+                    }.apply { isRepeats = true; start() }
+                }
                 if (isWindows) makeClickThrough(win)
                 if (timeoutMs > 0) {
                     osdHide?.stop()
                     osdHide = Timer(timeoutMs) { win.isVisible = false }
                         .apply { isRepeats = false; start() }
                 }
-                PlayerLog.log("OSD card: '${card.title.take(24)}' ${pref.width}x${pref.height} alpha=$perPixelAlpha")
+                PlayerLog.log("OSD card: '${card.title.take(24)}' ${panel.preferredSize.width}x${panel.preferredSize.height} alpha=$perPixelAlpha placed=$placed")
             }.onFailure {
                 PlayerLog.log("OSD card FEHLER: ${it.javaClass.simpleName} ${it.message}")
             }
         }
     }
+
+    private var osdPlaceTimer: Timer? = null
+    private var osdPlaceAttempts = 0
+
+    /** Karte unten links ueber dem Video positionieren. false = Canvas noch nicht bereit. */
+    private fun positionOsd(): Boolean {
+        val canvas = videoCanvas ?: return false
+        val win = osdWin ?: return false
+        val panel = osdPanel ?: return false
+        if (!canvas.isShowing || canvas.width < 120 || canvas.height < 90) return false
+        val pref = panel.preferredSize
+        val loc = runCatching { canvas.locationOnScreen }.getOrNull() ?: return false
+        win.setBounds(
+            loc.x + 26,
+            loc.y + canvas.height - pref.height - 26,
+            pref.width, pref.height
+        )
+        return true
+    }
+
+    /** Bei Fenster-Resize/Move (Vollbild-Wechsel) die sichtbare Karte nachziehen. */
+    private var osdCanvasListener: java.awt.event.ComponentListener? = null
 
     /** Senderlogo fuer die Karte (gecacht, wird pro Kanal neu geladen). */
     private var logoPath: String? = null
@@ -480,9 +512,9 @@ class VlcPlayer : VodPlayerApi {
 
         private val padX = 20
         private val padY = 15
-        private val logoSz = 46
+        private val logoBoxW = 96
+        private val logoBoxH = 40
         private val gap = 14
-        private val barW = 300
         private val barH = 5
 
         private val fTitle = java.awt.Font(java.awt.Font.SANS_SERIF, java.awt.Font.BOLD, 19)
@@ -491,20 +523,23 @@ class VlcPlayer : VodPlayerApi {
 
         private fun w(s: String, f: java.awt.Font): Int = getFontMetrics(f).stringWidth(s)
 
+        /** Breite des Textblocks — Balken laeuft ueber genau diese Breite. */
+        private fun contentWidth(c: OsdCard): Int = maxOf(
+            w(c.title, fTitle),
+            if (c.sub.isNotBlank()) w(c.sub, fSub) else 0,
+            if (!c.extra.isNullOrBlank()) w(c.extra, fExtra) else 0,
+            240
+        )
+
         override fun getPreferredSize(): java.awt.Dimension {
             val c = card ?: return java.awt.Dimension(20, 20)
-            val wText = maxOf(
-                w(c.title, fTitle),
-                if (c.sub.isNotBlank()) w(c.sub, fSub) else 0,
-                if (!c.extra.isNullOrBlank()) w(c.extra, fExtra) else 0,
-                if (c.barPercent != null) barW else 0
-            )
+            val wText = contentWidth(c)
             var h = padY * 2 + getFontMetrics(fTitle).height
             if (c.sub.isNotBlank()) h += 3 + getFontMetrics(fSub).height
             if (c.barPercent != null) h += 9 + barH
             if (!c.extra.isNullOrBlank()) h += 7 + getFontMetrics(fExtra).height
-            h = maxOf(h, padY * 2 + (if (logo != null) logoSz else 0))
-            val logoW = if (logo != null) logoSz + gap else 0
+            h = maxOf(h, padY * 2 + (if (logo != null) logoBoxH else 0))
+            val logoW = if (logo != null) logoBoxW + gap else 0
             return java.awt.Dimension(padX * 2 + logoW + wText, h)
         }
 
@@ -516,22 +551,32 @@ class VlcPlayer : VodPlayerApi {
                     java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
                 g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
                     java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
-                val ww = width - 1
-                val hh = height - 1
-                g.color = if (alpha) java.awt.Color(0x0B, 0x0E, 0x14, 200)
-                          else java.awt.Color(0x0B, 0x0E, 0x14)
-                g.fillRoundRect(0, 0, ww, hh, 16, 16)
-                g.color = java.awt.Color(255, 255, 255, if (alpha) 30 else 40)
+                val ww = width.toFloat()
+                val hh = height.toFloat()
+                // 1px Innenabstand: sonst schneidet der Fensterrand die
+                // antialiased Rundung an -> ausgefranste/abgeschnittene Ecken.
+                val inset = 1f
+                val rw = ww - inset * 2f - 1f
+                val rh = hh - inset * 2f - 1f
+                val radius = 14f
+                g.color = if (alpha) java.awt.Color(0x0C, 0x14, 0x24, 110)
+                          else java.awt.Color(0x0C, 0x14, 0x24)
+                g.fillRoundRect(inset.toInt(), inset.toInt(), rw.toInt(), rh.toInt(),
+                    radius.toInt(), radius.toInt())
+                g.color = java.awt.Color(255, 255, 255, if (alpha) 26 else 34)
                 g.stroke = java.awt.BasicStroke(1f)
-                g.drawRoundRect(0, 0, ww, hh, 16, 16)
+                g.drawRoundRect(inset.toInt(), inset.toInt(), rw.toInt(), rh.toInt(),
+                    radius.toInt(), radius.toInt())
 
                 var x = padX
                 logo?.let { img ->
-                    val scale = logoSz.toFloat() / maxOf(img.width, img.height)
+                    // Logo vollständig in die Box einpassen (Quell-Icons sind oft
+                    // nur 100x13 px — sie sollen lesbar sein, nicht winzig).
+                    val scale = minOf(logoBoxW.toFloat() / img.width, logoBoxH.toFloat() / img.height)
                     val lw = (img.width * scale).toInt().coerceAtLeast(1)
                     val lh = (img.height * scale).toInt().coerceAtLeast(1)
-                    g.drawImage(img, x + (logoSz - lw) / 2, padY + (logoSz - lh) / 2, lw, lh, null)
-                    x += logoSz + gap
+                    g.drawImage(img, x + (logoBoxW - lw) / 2, padY + (logoBoxH - lh) / 2, lw, lh, null)
+                    x += logoBoxW + gap
                 }
 
                 var y = padY + getFontMetrics(fTitle).ascent
@@ -546,9 +591,10 @@ class VlcPlayer : VodPlayerApi {
                 }
                 if (c.barPercent != null) {
                     y += 9
-                    g.color = java.awt.Color(255, 255, 255, 45)
-                    g.fillRoundRect(x, y, barW, barH, barH, barH)
-                    val fw = (barW * c.barPercent.coerceIn(0f, 1f)).toInt()
+                    val bw = contentWidth(c)
+                    g.color = java.awt.Color(255, 255, 255, 70)
+                    g.fillRoundRect(x, y, bw, barH, barH, barH)
+                    val fw = (bw * c.barPercent.coerceIn(0f, 1f)).toInt()
                     if (fw > 0) {
                         g.color = java.awt.Color(0xFF, 0xC9, 0x4D)
                         g.fillRoundRect(x, y, fw, barH, barH, barH)
@@ -610,6 +656,21 @@ class VlcPlayer : VodPlayerApi {
         // 1.5.18: nie Fokus klauen — sonst bricht AWT-Vollbild sofort ab
         w.setAutoRequestFocus(false)
         w.isVisible = false
+        // Vollbild-/Resize-Wechsel: sichtbare Karte mitziehen
+        videoCanvas?.let { c ->
+            if (osdCanvasListener == null) {
+                val l = object : java.awt.event.ComponentAdapter() {
+                    override fun componentResized(e: java.awt.event.ComponentEvent?) {
+                        if (osdWin?.isVisible == true) positionOsd()
+                    }
+                    override fun componentMoved(e: java.awt.event.ComponentEvent?) {
+                        if (osdWin?.isVisible == true) positionOsd()
+                    }
+                }
+                c.addComponentListener(l)
+                osdCanvasListener = l
+            }
+        }
         osdWin = w
         osdPanel = panel
         return w
