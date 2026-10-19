@@ -278,21 +278,55 @@ fun SettingsScreen(vm: DesktopViewModel) {
         // ---- Player-Info ----
         Text("Player", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
-        Text("Player-ID: ${CredStore.playerId()}", color = TextMid, fontSize = 14.sp)
-        Text("Passwort: ${CredStore.pairingPw()}", color = TextMid, fontSize = 14.sp)
+        // Player-ID + Passwort: Klick kopiert den Wert in die Zwischenablage
+        // (für die Weitergabe an das Panel). Kurzes Feedback statt Dialog.
+        val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+        var copied by remember { mutableStateOf<String?>(null) }
+        LaunchedEffect(copied) {
+            if (copied != null) {
+                kotlinx.coroutines.delay(1600)
+                copied = null
+            }
+        }
+        val panelUrl = "https://panel.smartys.tech/pair?mac=${CredStore.playerId()}&pw=${CredStore.pairingPw()}"
+
+        CopyRow(
+            label = "Player-ID",
+            value = CredStore.playerId(),
+            hint = if (copied == "id") "✓ kopiert" else "klicken = kopieren",
+            onCopy = {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(CredStore.playerId()))
+                copied = "id"
+            }
+        )
+        CopyRow(
+            label = "Passwort",
+            value = CredStore.pairingPw(),
+            hint = if (copied == "pw") "✓ kopiert" else "klicken = kopieren",
+            onCopy = {
+                clipboard.setText(androidx.compose.ui.text.AnnotatedString(CredStore.pairingPw()))
+                copied = "pw"
+            }
+        )
         Spacer(Modifier.height(14.dp))
         // QR-Code: scannen statt abtippen
         QrCode(
-            "https://panel.smartys.tech/pair?mac=${CredStore.playerId()}&pw=${CredStore.pairingPw()}",
+            panelUrl,
             modifier = Modifier.size(180.dp).clip(RoundedCornerShape(10.dp))
                 .background(Color.White).padding(10.dp)
         )
         Spacer(Modifier.height(10.dp))
         Text("QR-Code mit dem Handy scannen", color = TextMid, fontSize = 12.sp)
         Spacer(Modifier.height(12.dp))
+        // Panel-Link: Klick öffnet die Panel-Seite im Browser
         Text(
-            "Playlist verwalten: panel.smartys.tech",
-            color = TextMid, fontSize = 13.sp
+            "Playlist verwalten → panel.smartys.tech",
+            color = Accent, fontSize = 13.sp,
+            modifier = Modifier.clickable {
+                runCatching {
+                    java.awt.Desktop.getDesktop().browse(java.net.URI("https://panel.smartys.tech"))
+                }
+            }
         )
     }
 
@@ -358,4 +392,29 @@ private fun SettingButton(label: String, onClick: () -> Unit) {
             .background(Card).clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 12.dp)
     )
+}
+
+/**
+ * Wert-Zeile mit Klick-zum-Kopieren (Player-ID / Passwort).
+ * Der eigentliche Wert steht fett da, rechts der Hinweis — damit man sofort
+ * sieht, dass die Zeile klickbar ist und WAS in der Zwischenablage landet.
+ */
+@Composable
+private fun CopyRow(label: String, value: String, hint: String, onCopy: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onCopy)
+            .padding(horizontal = 4.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("$label: ", color = TextMid, fontSize = 14.sp)
+        Text(value, color = TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.weight(1f))
+        Text(
+            hint,
+            color = if (hint.startsWith("✓")) Accent else TextMid,
+            fontSize = 11.sp
+        )
+    }
 }
