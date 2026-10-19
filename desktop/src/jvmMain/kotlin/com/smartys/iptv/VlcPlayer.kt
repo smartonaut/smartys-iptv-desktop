@@ -621,8 +621,8 @@ class VlcPlayer : VodPlayerApi {
 
         private val padX = 20
         private val padY = 15
-        private val logoBoxW = 96
-        private val logoBoxH = 40
+        private val logoBoxW = 152
+        private val logoBoxH = 60
         private val gap = 14
         private val barH = 5
 
@@ -660,6 +660,12 @@ class VlcPlayer : VodPlayerApi {
                     java.awt.RenderingHints.VALUE_ANTIALIAS_ON)
                 g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
                     java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+                // Logo wird skaliert gezeichnet — ohne bikubische Interpolation
+                // wirkt die kleine Schrift im Senderlogo pixelig.
+                g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,
+                    java.awt.RenderingHints.VALUE_INTERPOLATION_BICUBIC)
+                g.setRenderingHint(java.awt.RenderingHints.KEY_RENDERING,
+                    java.awt.RenderingHints.VALUE_RENDER_QUALITY)
                 val ww = width.toFloat()
                 val hh = height.toFloat()
                 // 1px Innenabstand: sonst schneidet der Fensterrand die
