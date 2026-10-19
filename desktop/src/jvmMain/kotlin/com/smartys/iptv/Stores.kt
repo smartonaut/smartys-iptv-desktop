@@ -88,6 +88,22 @@ object ProfileStore {
 
     /** Präfix für profilgebundene Werte. */
     fun scoped(base: String): String = "${base}__${activeId() ?: "default"}"
+
+    // ---------- Profil -> Panel-Line (Bindung) ----------
+
+    /**
+     * Welche Line (Provider aus dem Panel) gehört zu diesem Profil?
+     * Gespeichert wird der stabile CredStore.Creds.key (URL|User) — so
+     * überlebt die Bindung Umbenennungen der Line im Panel.
+     * Nicht gesetzt = nicht gebunden (App nutzt dann alle/erste Lines wie bisher).
+     */
+    fun lineKey(profileId: String): String? = prefs().get("line_$profileId", null)
+
+    fun setLineKey(profileId: String, key: String?) {
+        val t = key?.trim().orEmpty()
+        if (t.isEmpty()) prefs().remove("line_$profileId")
+        else prefs().put("line_$profileId", t)
+    }
 }
 
 // ---------- Fortsetzen (Resume) ----------

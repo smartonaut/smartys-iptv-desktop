@@ -19,6 +19,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 
@@ -55,6 +58,9 @@ fun SettingsScreen(vm: DesktopViewModel) {
     val active = remember { mutableStateOf(ProfileStore.active()) }
     var addDialog by remember { mutableStateOf(false) }
     var pinDialog by remember { mutableStateOf(false) }
+    var lineDialogFor by remember { mutableStateOf<Profile?>(null) }
+    var reloadingLines by remember { mutableStateOf(false) }
+    val uiScope = rememberCoroutineScope()
 
     Column(
         Modifier.fillMaxSize().background(Bg).verticalScroll(rememberScrollState()).padding(24.dp)
@@ -80,17 +86,52 @@ fun SettingsScreen(vm: DesktopViewModel) {
                 Box(Modifier.size(20.dp).clip(androidx.compose.foundation.shape.CircleShape)
                     .background(androidx.compose.ui.graphics.Color(p.color)))
                 Spacer(Modifier.width(12.dp))
-                Text(p.name, color = TextHi, fontSize = 15.sp)
+                Column(Modifier.weight(1f)) {
+                    Text(p.name, color = TextHi, fontSize = 15.sp)
+                    // Panel-Line des Profils — Klick öffnet die Line-Auswahl
+                    Text(
+                        "Line: ${vm.lineLabelFor(p.id) ?: "Automatisch"}  ▾",
+                        color = Accent, fontSize = 11.sp,
+                        modifier = Modifier.clickable { lineDialogFor = p }
+                    )
+                }
                 if (p.id == active.value?.id) {
-                    Spacer(Modifier.weight(1f))
                     Text("aktiv", color = Accent, fontSize = 12.sp)
                 }
             }
             Spacer(Modifier.height(6.dp))
         }
-        Row {
+        Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { addDialog = true }) { Text("+ Profil hinzufügen", color = Accent) }
+            Spacer(Modifier.width(10.dp))
+            // Lines neu vom Panel ziehen (z. B. nachdem im Panel eine Line
+            // hinzugekommen ist). Verschlüsselte Lines -> Unlock-Screen.
+            TextButton(
+                enabled = !reloadingLines,
+                onClick = {
+                    reloadingLines = true
+                    uiScope.launch {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                            vm.pairAndLoad(CredStore.playerId(), CredStore.pairingPw())
+                        }
+                        reloadingLines = false
+                    }
+                }
+            ) {
+                Text(
+                    if (reloadingLines) "lade Lines …" else "🔄 Lines vom Panel neu laden",
+                    color = if (reloadingLines) TextMid else Accent
+                )
+            }
         }
+        // Welche Lines kennt die App? (Labels aus dem Panel)
+        val knownLines = vm.lines()
+        Text(
+            if (knownLines.isEmpty()) "Keine Lines geladen."
+            else "Lines (${knownLines.size}): " + knownLines.joinToString(" · ") { it.second } +
+                 "   — aktiv: ${vm.activeLineLabel.ifBlank { "—" }}",
+            color = TextMid, fontSize = 12.sp
+        )
 
         Spacer(Modifier.height(24.dp))
 
@@ -379,6 +420,49 @@ fun SettingsScreen(vm: DesktopViewModel) {
                 }) { Text("Speichern", color = Accent) }
             },
             dismissButton = { TextButton(onClick = { pinDialog = false }) { Text("Abbrechen", color = TextMid) } }
+        )
+    }
+
+    // Profil -> Panel-Line
+    lineDialogFor?.let { prof ->
+        AlertDialog(
+            onDismissRequest = { lineDialogFor = null },
+            containerColor = Card,
+            title = { Text("Line für ${prof.name}", color = TextHi, fontSize = 18.sp) },
+            text = {
+                Column {
+                    Text("Welche Line aus dem Panel nutzt dieses Profil?",
+                        color = TextMid, fontSize = 13.sp)
+                    Spacer(Modifier.height(12.dp))
+                    val current = ProfileStore.lineKey(prof.id)
+                    // "Automatisch" = keine Bindung: alle Lines, erste Line aktiv
+                    val autoSelected = current == null
+                    Text(
+                        (if (autoSelected) "✓ " else "") + "Automatisch (alle Lines)",
+                        color = if (autoSelected) Accent else TextHi, fontSize = 14.sp,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            vm.setProfileLine(prof.id, null)
+                            lineDialogFor = null
+                        }.padding(vertical = 10.dp)
+                    )
+                    vm.lines().forEach { (idx, label) ->
+                        val isSel = current != null && vm.allProviders.getOrNull(idx)?.key == current
+                        Text(
+                            (if (isSel) "✓ " else "") + label,
+                            color = if (isSel) Accent else TextHi, fontSize = 14.sp,
+                            modifier = Modifier.fillMaxWidth().clickable {
+                                vm.setProfileLine(prof.id, idx)
+                                lineDialogFor = null
+                            }.padding(vertical = 10.dp)
+                        )
+                    }
+                    if (vm.lines().isEmpty()) {
+                        Text("Keine Lines geladen — oben „Lines vom Panel neu laden“.",
+                            color = Danger, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { lineDialogFor = null }) { Text("Schließen", color = Accent) } }
         )
     }
 }

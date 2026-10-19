@@ -64,7 +64,7 @@ fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRad
 fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit, onStop: () -> Unit = {}, floatingChannel: LiveStream? = null, onMultiView: () -> Unit = {}) {
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var favMode by remember { mutableStateOf(false) }
-    var sortMode by remember { mutableStateOf(ChannelPrefs.sortMode()) }
+    var sortMode by remember(vm.activeProfileId) { mutableStateOf(ChannelPrefs.sortMode()) }
     var channelMenuFor by remember { mutableStateOf<LiveStream?>(null) }
     var pinFor by remember { mutableStateOf<LiveStream?>(null) }
 
@@ -73,7 +73,12 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
     var catMenuFor by remember { mutableStateOf<Category?>(null) }
     var catMenuMulti by remember { mutableStateOf(false) }
     var catsVersion by remember { mutableStateOf(0) }
-    val shownCats = remember(state.categories, catsVersion) { CategoryPrefs.applyTo("live", state.categories) }
+    // Profilwechsel: Auswahl zurücksetzen und profilgebundene Kategorie-
+    // Einstellungen (ausgeblendete Gruppen, Reihenfolge) neu lesen.
+    LaunchedEffect(vm.activeProfileId) { selectedCat = null; favMode = false; catsVersion++ }
+    val shownCats = remember(state.categories, catsVersion, vm.activeProfileId) {
+        CategoryPrefs.applyTo("live", state.categories)
+    }
 
     val applied = remember(state.channels, selectedCat, favMode, vm.favorites, sortMode) {
         var list = when {
@@ -521,7 +526,10 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var catMenuFor by remember { mutableStateOf<Category?>(null) }
     var catsVersion by remember { mutableStateOf(0) }
-    val shownCats = remember(vm.vodCategories, catsVersion) { CategoryPrefs.applyTo("movies", vm.vodCategories) }
+    LaunchedEffect(vm.activeProfileId) { selectedCat = null; catsVersion++ }
+    val shownCats = remember(vm.vodCategories, catsVersion, vm.activeProfileId) {
+        CategoryPrefs.applyTo("movies", vm.vodCategories)
+    }
     val applied = remember(vm.vodMovies, selectedCat) {
         if (selectedCat == null) vm.vodMovies
         else vm.vodMovies.filter { it.categoryId == selectedCat }
@@ -753,7 +761,10 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var catMenuFor by remember { mutableStateOf<Category?>(null) }
     var catsVersion by remember { mutableStateOf(0) }
-    val shownCats = remember(vm.seriesCategories, catsVersion) { CategoryPrefs.applyTo("series", vm.seriesCategories) }
+    LaunchedEffect(vm.activeProfileId) { selectedCat = null; catsVersion++ }
+    val shownCats = remember(vm.seriesCategories, catsVersion, vm.activeProfileId) {
+        CategoryPrefs.applyTo("series", vm.seriesCategories)
+    }
     val applied = remember(vm.seriesShows, selectedCat) {
         if (selectedCat == null) vm.seriesShows
         else vm.seriesShows.filter { it.categoryId == selectedCat }

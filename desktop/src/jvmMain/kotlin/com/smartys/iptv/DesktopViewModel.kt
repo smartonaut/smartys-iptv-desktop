@@ -36,6 +36,9 @@ class DesktopViewModel {
         private set
     var allProviders by mutableStateOf<List<CredStore.Creds>>(emptyList())
         private set
+    /** Anzeigename der aktiven Line ("Alex2") — für Einstellungen/Statuszeile. */
+    var activeLineLabel by mutableStateOf<String>("")
+        private set
     private var apis: List<XtreamApi> = emptyList()
     private var api: XtreamApi? = null
 
@@ -43,6 +46,11 @@ class DesktopViewModel {
     var favorites by mutableStateOf<Set<String>>(emptySet())
         private set
     var recentIds by mutableStateOf<List<String>>(emptyList())
+        private set
+    /** Aktive Profil-ID als Compose-State: Screens hängen ihre remember-Keys daran,
+     *  damit profilgebundene Einstellungen (ausgeblendete Gruppen, Sortierung)
+     *  beim Profilwechsel sofort neu gelesen werden. */
+    var activeProfileId by mutableStateOf<String?>(ProfileStore.activeId())
         private set
 
     // VOD (Filme + Serien)
@@ -101,12 +109,62 @@ class DesktopViewModel {
             state = AppState.Pairing
             return
         }
-        creds = providers.first()
         allProviders = providers
         apis = providers.map { buildApi(it) }
-        api = apis.firstOrNull()
+        applyActiveLine()
         loadContent()
         reloadProfileState()
+    }
+
+    // ---------- Profil -> Panel-Line ----------
+
+    /** Index der Line, die am aktiven Profil hängt (null = nicht gebunden). */
+    private fun boundProviderIndex(): Int? {
+        val profileId = ProfileStore.activeId() ?: return null
+        val key = ProfileStore.lineKey(profileId) ?: return null
+        val idx = allProviders.indexOfFirst { it.key == key }
+        return if (idx >= 0) idx else null
+    }
+
+    /** Alle Lines für die Auswahl in den Einstellungen: (Index, Anzeigename). */
+    fun lines(): List<Pair<Int, String>> = allProviders.mapIndexed { i, c ->
+        i to c.label.ifBlank { "Line ${i + 1}" }
+    }
+
+    /** Name der Line, die an einem Profil hängt (null = "Automatisch"). */
+    fun lineLabelFor(profileId: String): String? {
+        val key = ProfileStore.lineKey(profileId) ?: return null
+        val idx = allProviders.indexOfFirst { it.key == key }
+        if (idx < 0) return null
+        return allProviders[idx].label.ifBlank { "Line ${idx + 1}" }
+    }
+
+    /** Profil an eine Line binden (index = null -> "Automatisch"). */
+    fun setProfileLine(profileId: String, index: Int?) {
+        ProfileStore.setLineKey(profileId, index?.let { allProviders.getOrNull(it)?.key })
+        if (profileId == ProfileStore.activeId()) {
+            applyActiveLine()
+            loadContent()
+        }
+    }
+
+    /**
+     * Aktive Line aus der Profil-Bindung setzen: VOD/Serien/EPG/Aufnahmen laufen
+     * über `creds`, Live-Kanäle werden in loadContent() auf die Line gefiltert.
+     * Ohne Bindung: erste Line (bisheriges Verhalten).
+     */
+    private fun applyActiveLine() {
+        val idx = boundProviderIndex() ?: 0
+        val p = allProviders.getOrNull(idx) ?: return
+        val changed = creds?.key != p.key
+        creds = p
+        api = apis.getOrNull(idx) ?: apis.firstOrNull()
+        activeLineLabel = p.label.ifBlank { "Line ${idx + 1}" }
+        if (changed) {
+            vodCategories = emptyList(); vodMovies = emptyList()
+            seriesCategories = emptyList(); seriesShows = emptyList()
+            vodError = null; vodLoading = false
+        }
     }
 
     /** IBPlayer-Flow: Pairing mit panel.smartys.tech, dann zugewiesene Playlist laden. */
@@ -154,13 +212,13 @@ class DesktopViewModel {
 
         val providers = (0 until providersArr.length()).map { i ->
             val p = providersArr.getJSONObject(i)
-            CredStore.Creds(p.getString("server_url"), p.getString("username"), p.getString("password"))
+            CredStore.Creds(p.getString("server_url"), p.getString("username"),
+                p.getString("password"), p.optString("label", ""))
         }
         CredStore.saveProviders(providers)
-        creds = providers.first()
         allProviders = providers
         apis = providers.map { buildApi(it) }
-        api = apis.firstOrNull()
+        applyActiveLine()
         loadContent()
         true
     }.getOrDefault(false)
@@ -179,14 +237,14 @@ class DesktopViewModel {
                 SecCrypto.decryptField(key, ep.cipherServerUrl, playerId),
                 SecCrypto.decryptField(key, ep.cipherUsername, playerId),
                 SecCrypto.decryptField(key, ep.cipherPassword, playerId),
+                ep.label,
             )
         }.filter { it.url.isNotBlank() && it.user.isNotBlank() }
         if (provs.isEmpty()) return false
         CredStore.saveProviders(provs)
-        creds = provs.first()
         allProviders = provs
         apis = provs.map { buildApi(it) }
-        api = apis.firstOrNull()
+        applyActiveLine()
         pendingUnlock = null
         loadContent()
         return true
@@ -219,7 +277,17 @@ class DesktopViewModel {
                     allCats.addAll(cats)
                 }
                 val clean = all.filter { !it.name.contains("####") }
-                state = AppState.Ready(allCats, clean)
+                // Profil an eine Line gebunden? Dann nur deren Kanäle + Kategorien
+                // zeigen. Ohne Bindung bleibt das bisherige Verhalten (alle Lines
+                // zusammengeführt, Wiedergabe je Kanal über providerIndex).
+                val bIdx = boundProviderIndex()
+                if (bIdx != null) {
+                    val chs = clean.filter { it.providerIndex == bIdx }
+                    val catIds = chs.map { it.categoryId }.toSet()
+                    state = AppState.Ready(allCats.filter { it.id in catIds }, chs)
+                } else {
+                    state = AppState.Ready(allCats, clean)
+                }
                 // EPG + VOD/Serien laden
                 loadXmltvEpg()
                 loadVod()
@@ -373,8 +441,20 @@ class DesktopViewModel {
     }
 
     fun reloadProfileState() {
+        activeProfileId = ProfileStore.activeId()
         favorites = FavoritesStore.favorites()
         recentIds = FavoritesStore.recentIds()
+
+        // Profilwechsel: Senderliste IMMER verwerfen und neu laden — die Profile
+        // können an unterschiedliche Panel-Lines/Anbieter gebunden sein.
+        // EPG/VOD/Serien-Caches gehören ebenfalls zur alten Line.
+        epgCache.clear()
+        epgInFlight.clear()
+        vodCategories = emptyList(); vodMovies = emptyList()
+        seriesCategories = emptyList(); seriesShows = emptyList()
+        vodError = null; vodLoading = false
+        applyActiveLine()
+        loadContent()
     }
 
     fun fetchPlayerStatus(playerId: String): Pair<Boolean, Boolean>? = runCatching {

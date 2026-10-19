@@ -17,7 +17,10 @@ import java.security.SecureRandom
  */
 object CredStore {
 
-    data class Creds(val url: String, val user: String, val pass: String) {
+    data class Creds(val url: String, val user: String, val pass: String, val label: String = "") {
+        /** Stabiler Schlüssel für die Profil→Line-Bindung (URL+User sind eindeutig). */
+        val key: String get() = "$url|$user"
+
         fun streamUrl(streamId: String, ext: String = "m3u8"): String =
             "$url/live/$user/$pass/$streamId.$ext"
 
@@ -81,7 +84,8 @@ object CredStore {
         val json = readJson()
         val arr = org.json.JSONArray()
         providers.forEach { c ->
-            arr.put(org.json.JSONObject().put("url", c.url).put("user", c.user).put("pass", c.pass))
+            arr.put(org.json.JSONObject().put("url", c.url).put("user", c.user)
+                .put("pass", c.pass).put("label", c.label))
         }
         json["providers"] = arr.toString()
         writeJson(json)
@@ -94,7 +98,8 @@ object CredStore {
             val arr = org.json.JSONArray(raw)
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
-                Creds(o.getString("url"), o.getString("user"), o.getString("pass"))
+                Creds(o.getString("url"), o.getString("user"), o.getString("pass"),
+                      o.optString("label", ""))
             }
         }.getOrDefault(emptyList())
     }
