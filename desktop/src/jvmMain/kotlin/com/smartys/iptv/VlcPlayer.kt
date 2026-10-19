@@ -307,8 +307,10 @@ class VlcPlayer : VodPlayerApi {
         val mp = mediaPlayer ?: return
         currentUrl = url
         currentIsVod = isVod
+        // OSD-Overlay (PNG) braucht den "logo"-Video-Filter in der Kette.
+        val osdOpt = ":video-filter=logo"
         if (timeshift) {
-            val opts = mutableListOf(":input-timeshift-access=file")
+            val opts = mutableListOf(":input-timeshift-access=file", osdOpt)
             timeshiftDir?.takeIf { it.isNotBlank() }?.let {
                 opts.add(":input-timeshift-dir=$it")
             }
@@ -317,9 +319,9 @@ class VlcPlayer : VodPlayerApi {
             // Resume: VLC öffnet den Titel DIREKT ab dieser Position — ein
             // seekTo() direkt nach dem asynchronen play() verpufft, weil die
             // Media zu dem Zeitpunkt noch nicht geladen ist.
-            mp.media().play(url, ":start-time=${startPosMs / 1000.0}")
+            mp.media().play(url, ":start-time=${startPosMs / 1000.0}", osdOpt)
         } else {
-            mp.media().play(url)
+            mp.media().play(url, osdOpt)
         }
     }
 
@@ -415,6 +417,10 @@ class VlcPlayer : VodPlayerApi {
 
     /** Karte anzeigen (unten links ueber dem Video). timeoutMs = 0: nie ausblenden. */
     fun showCard(card: OsdCard, timeoutMs: Int = 5000) {
+        // 1. Wahl: PNG-Overlay über VLCs Bild-Filter — echtes Alpha, wird IN den
+        // Frame geblendet (kein Fenster-Trick, skaliert mit Vollbild mit).
+        if (showCardOverlay(card, timeoutMs)) return
+        // Fallback: AWT-Fenster (opak, falls der Filter nicht greift).
         SwingUtilities.invokeLater {
             runCatching {
                 val win = ensureOsdWindow() ?: return@runCatching
@@ -457,6 +463,79 @@ class VlcPlayer : VodPlayerApi {
 
     private var osdPlaceTimer: Timer? = null
     private var osdPlaceAttempts = 0
+
+    // ---------- OSD als PNG über den VLC-Bild-Filter (echtes Alpha) ----------
+
+    private var osdOverlayDir: File? = null
+    private var osdOverlaySeq = 0
+    private var osdOverlayTimer: Timer? = null
+
+    private fun overlayDir(): File {
+        osdOverlayDir?.let { return it }
+        val d = File(System.getProperty("user.home"), ".smartys-iptv/osd")
+        runCatching { d.mkdirs() }
+        runCatching { d.listFiles()?.forEach { f -> f.delete() } }
+        osdOverlayDir = d
+        return d
+    }
+
+    /**
+     * Karte als transparentes PNG rendern. Die Ränder (26 px links/unten) sind
+     * transparent und sorgen dafür, dass die Karte mit Abstand in der linken
+     * unteren Ecke des Bildes sitzt (Logo-Filter ankert unten links).
+     */
+    private fun renderCardPng(card: OsdCard, logo: java.awt.image.BufferedImage?): File? {
+        return runCatching {
+            val panel = OsdCardPanel(alpha = true)
+            panel.isOpaque = false
+            panel.card = card
+            panel.logo = logo
+            val pref = panel.preferredSize
+            val margin = 26
+            val img = java.awt.image.BufferedImage(
+                pref.width + margin, pref.height + margin, java.awt.image.BufferedImage.TYPE_INT_ARGB
+            )
+            val g = img.createGraphics()
+            try {
+                panel.setSize(pref)
+                g.translate(margin, 0)
+                panel.paint(g)
+            } finally {
+                g.dispose()
+            }
+            // Zwei wechselnde Dateinamen: VLC cacht das Bild pro Dateiname —
+            // derselbe Name wuerde die alte Karte zeigen.
+            val f = File(overlayDir(), "card_${osdOverlaySeq++ % 2}.png")
+            javax.imageio.ImageIO.write(img, "png", f)
+            f
+        }.onFailure { PlayerLog.log("OSD-PNG FEHLER: ${it.javaClass.simpleName} ${it.message}") }
+            .getOrNull()
+    }
+
+    /** Karte über den "logo"-Video-Filter einblenden. false = Filter/API nicht verfuegbar. */
+    private fun showCardOverlay(card: OsdCard, timeoutMs: Int): Boolean {
+        val mp = mediaPlayer ?: return false
+        val png = renderCardPng(card, loadLogoImage(card.logoPath ?: logoPath)) ?: return false
+        val ok = runCatching {
+            mp.logo().setFile(png.absolutePath)
+            mp.logo().setPosition(uk.co.caprica.vlcj.player.base.LogoPosition.BOTTOM_LEFT)
+            mp.logo().setOpacity(1.0f)
+            mp.logo().enable(true)
+            true
+        }.getOrElse {
+            PlayerLog.log("OSD-Overlay FEHLER: ${it.javaClass.simpleName} ${it.message}")
+            false
+        }
+        if (!ok) return false
+        PlayerLog.log("OSD overlay: ${png.name} ${png.length()}B")
+        if (timeoutMs > 0) {
+            osdOverlayTimer?.stop()
+            osdOverlayTimer = Timer(timeoutMs) {
+                runCatching { mp.logo().enable(false) }
+            }.apply { isRepeats = false; start() }
+        }
+        return true
+    }
 
     /** Karte unten links positionieren. false = Canvas noch nicht bereit. */
     private fun positionOsd(): Boolean {
@@ -809,6 +888,8 @@ class VlcPlayer : VodPlayerApi {
     }
 
     fun hideOsd() {
+        osdOverlayTimer?.stop()
+        runCatching { mediaPlayer?.logo()?.enable(false) }
         SwingUtilities.invokeLater {
             osdHide?.stop()
             osdWin?.isVisible = false
