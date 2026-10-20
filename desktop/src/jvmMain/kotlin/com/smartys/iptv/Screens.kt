@@ -535,8 +535,11 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
     val shownCats = remember(vm.vodCategories, catsVersion, vm.activeProfileId) {
         CategoryPrefs.applyTo("movies", vm.vodCategories)
     }
-    val applied = remember(vm.vodMovies, selectedCat) {
-        if (selectedCat == null) vm.vodMovies
+    val hiddenCatIds = remember(vm.vodCategories, catsVersion, vm.activeProfileId) {
+        CategoryPrefs.hiddenIds("movies", vm.vodCategories)
+    }
+    val applied = remember(vm.vodMovies, selectedCat, hiddenCatIds) {
+        if (selectedCat == null) vm.vodMovies.filter { it.categoryId !in hiddenCatIds }
         else vm.vodMovies.filter { it.categoryId == selectedCat }
     }
 
@@ -770,8 +773,11 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
     val shownCats = remember(vm.seriesCategories, catsVersion, vm.activeProfileId) {
         CategoryPrefs.applyTo("series", vm.seriesCategories)
     }
-    val applied = remember(vm.seriesShows, selectedCat) {
-        if (selectedCat == null) vm.seriesShows
+    val hiddenCatIds = remember(vm.seriesCategories, catsVersion, vm.activeProfileId) {
+        CategoryPrefs.hiddenIds("series", vm.seriesCategories)
+    }
+    val applied = remember(vm.seriesShows, selectedCat, hiddenCatIds) {
+        if (selectedCat == null) vm.seriesShows.filter { it.categoryId !in hiddenCatIds }
         else vm.seriesShows.filter { it.categoryId == selectedCat }
     }
 
