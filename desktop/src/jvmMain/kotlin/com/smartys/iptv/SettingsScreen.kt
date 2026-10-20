@@ -272,6 +272,29 @@ fun SettingsScreen(vm: DesktopViewModel) {
 
         Spacer(Modifier.height(16.dp))
 
+        // ---- Fenster im Vordergrund halten (Always-on-Top) ----
+        Text("Fenster", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        var alwaysOnTop by remember { mutableStateOf(AppSettings.alwaysOnTop()) }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Switch(
+                checked = alwaysOnTop,
+                onCheckedChange = { on ->
+                    alwaysOnTop = on
+                    AppSettings.setAlwaysOnTop(on)
+                    runCatching { FullscreenController.window?.isAlwaysOnTop = on }
+                },
+                colors = SwitchDefaults.colors(checkedThumbColor = Accent, checkedTrackColor = Color(0x55FFC94D))
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                "Im Vordergrund halten — bleibt über anderen Programmen (Windows/X11; unter Wayland regelt das der Compositor)",
+                color = TextMid, fontSize = 13.sp
+            )
+        }
+
+        Spacer(Modifier.height(16.dp))
+
         // ---- Aufnahme-Daemon Autostart (optional) ----
         Text("Aufnahme-Daemon", color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))

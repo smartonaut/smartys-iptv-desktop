@@ -71,6 +71,13 @@ object AppSettings {
 
     fun setDaemonAutostartEnabled(enabled: Boolean) = set("daemon_autostart", enabled.toString())
 
+    // ---------- Fenster ----------
+
+    /** Fenster im Vordergrund halten (Always-on-Top) — Player bleibt ueber anderen Programmen. */
+    fun alwaysOnTop(): Boolean = get("always_on_top", "false").toBoolean()
+
+    fun setAlwaysOnTop(enabled: Boolean) = set("always_on_top", enabled.toString())
+
     // ---------- Video-Decoding (automatisch erkannt) ----------
 
     /**

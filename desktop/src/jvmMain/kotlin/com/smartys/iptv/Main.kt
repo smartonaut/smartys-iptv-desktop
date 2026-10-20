@@ -426,6 +426,8 @@ fun main(args: Array<String>) {
         val icon = loadWindowIcon()
         Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV", icon = icon) {
             FullscreenController.window = this.window
+            // Gespeicherte Einstellung "Im Vordergrund halten" beim Start anwenden.
+            runCatching { this.window.isAlwaysOnTop = AppSettings.alwaysOnTop() }
             App()
         }
     }
