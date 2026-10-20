@@ -2,6 +2,8 @@
 
 Plattformübergreifender IPTV-Player (Kotlin, Compose Multiplatform).
 
+**Website & Download:** https://player.smartys.tech/ — Windows (.msi), Linux (.deb/.rpm), Fire TV und Enigma2.
+
 ## Features
 
 - Live-TV, VOD und Serien
