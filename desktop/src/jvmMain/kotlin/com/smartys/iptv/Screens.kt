@@ -104,7 +104,7 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                     modifier = Modifier.fillMaxWidth().clickable { selectedCat = null; favMode = false }.padding(16.dp))
             }
             item {
-                Text("Favoriten (${vm.favorites.size})",
+                Text(I18n.sf("Favoriten ({0})", vm.favorites.size),
                     color = if (favMode) Accent else TextMid,
                     fontWeight = if (favMode) FontWeight.Bold else FontWeight.Normal,
                     fontSize = 14.sp,
@@ -132,7 +132,7 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
             if (hiddenCats > 0) {
                 item {
                     Text(
-                        "⚙ $hiddenCats ausgeblendet — alle einblenden",
+                        I18n.sf("⚙ {0} ausgeblendet — alle einblenden", hiddenCats),
                         color = TextMid, fontSize = 12.sp,
                         modifier = Modifier.fillMaxWidth().clickable {
                             CategoryPrefs.unhideAll("live")
@@ -151,19 +151,19 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
             ) {
                 Text(
                     when {
-                        favMode -> "Favoriten"
-                        selectedCat == null -> "Alle Kanäle"
+                        favMode -> I18n.s("Favoriten")
+                        selectedCat == null -> I18n.s("Alle Kanäle")
                         else -> state.categories.firstOrNull { it.id == selectedCat }?.name ?: ""
                     },
                     color = TextHi, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
-                Text("${applied.size} Kanäle", color = TextMid, fontSize = 13.sp)
+                Text(I18n.sf("{0} Kanäle", applied.size), color = TextMid, fontSize = 13.sp)
                 Spacer(Modifier.width(12.dp))
                 // Sortier-Button (Zyklus: Nummer → A–Z → Manuell)
                 val label = when (sortMode) {
-                    "name" -> "Sortieren: A–Z"
-                    "manual" -> "Sortieren: Manuell"
-                    else -> "Sortieren: Nummer"
+                    "name" -> I18n.s("Sortieren: A–Z")
+                    "manual" -> I18n.s("Sortieren: Manuell")
+                    else -> I18n.s("Sortieren: Nummer")
                 }
                 Surface(
                     shape = RoundedCornerShape(8.dp), color = Card,

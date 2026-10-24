@@ -36,8 +36,12 @@ val Danger = Color(0xFFFF6B6B)
 
 // ---------- Navigation ----------
 
-enum class Tab(val label: String) {
-    LIVE("Live-TV"), MOVIES("Filme"), SERIES("Serien"), SEARCH("Suche"), DOWNLOADS("Downloads"), RECORDINGS("Aufnahmen"), SETTINGS("Einstellungen")
+enum class Tab(private val titel: String) {
+    LIVE("Live-TV"), MOVIES("Filme"), SERIES("Serien"), SEARCH("Suche"),
+    DOWNLOADS("Downloads"), RECORDINGS("Aufnahmen"), SETTINGS("Einstellungen");
+
+    /** Übersetzt erst beim Lesen — so greift ein Sprachwechsel sofort. */
+    val label: String get() = I18n.s(titel)
 }
 
 data class VodPlaying(

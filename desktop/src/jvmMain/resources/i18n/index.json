@@ -1,0 +1,17 @@
+[
+ { "code": "de", "label": "Deutsch", "rtl": false },
+ { "code": "en", "label": "English", "rtl": false },
+ { "code": "fr", "label": "Français", "rtl": false },
+ { "code": "it", "label": "Italiano", "rtl": false },
+ { "code": "es", "label": "Español", "rtl": false },
+ { "code": "pt", "label": "Português", "rtl": false },
+ { "code": "nl", "label": "Nederlands", "rtl": false },
+ { "code": "pl", "label": "Polski", "rtl": false },
+ { "code": "sv", "label": "Svenska", "rtl": false },
+ { "code": "da", "label": "Dansk", "rtl": false },
+ { "code": "nb", "label": "Norsk", "rtl": false },
+ { "code": "fi", "label": "Suomi", "rtl": false },
+ { "code": "tr", "label": "Türkçe", "rtl": false },
+ { "code": "fa", "label": "فارسی", "rtl": true },
+ { "code": "ur", "label": "اردو", "rtl": true }
+]

@@ -113,7 +113,7 @@ fun SearchScreen(
                         SearchResultRow(
                             badge = ch.num?.toString() ?: "•",
                             title = ch.name,
-                            subtitle = ch.categoryName.ifBlank { "Live-TV" },
+                            subtitle = ch.categoryName.ifBlank { I18n.s("Live-TV") },
                             onClick = { onPlayChannel(ch) }
                         )
                     }
