@@ -9,6 +9,38 @@ unabhängig gebaut und versioniert — die Nummern dürfen auseinanderlaufen.
 
 ## Linux (deb/rpm)
 
+### 2.0.0 — 24.10.2026
+
+**36 Sprachen.** Alle europäischen Sprachen sowie Persisch und Urdu (beide
+rechts-nach-links). Deutsch bleibt Quellsprache und Fallback.
+
+- Oberfläche liegt jetzt als JSON unter `resources/i18n/` — neue Sprache heißt:
+  eine Datei plus eine Zeile in `index.json`, kein Code. Siehe README.
+- Sprachauswahl in den Einstellungen als Dropdown statt Chip-Reihe.
+- Übersetzt: Navigation, Kanalliste, Einstellungen, Aufnahmen, Downloads,
+  Player-OSD, Programm-Raster samt Zählern und Sortier-Labels.
+
+**Parität zur iOS-App (build35–43):**
+
+- **Programm-Raster** — sechs Stunden Fenster, Sender untereinander, laufende
+  Sendung hervorgehoben, Klick startet den Kanal.
+- **Staffel laden** im Staffelkopf, überspringt vorhandene Folgen.
+- **IMDb- und Filmstarts-Links** im Film-Detail (nur Links, kein Scraping —
+  filmstarts.de sperrt `/suchen/` per robots.txt).
+- **Fehlgeschlagene Downloads löschen**, gesammelt in der Kopfleiste.
+- **Abspann mit Rückfrage:** statt sofort zur nächsten Folge zu springen,
+  fünf Sekunden Hinweis, `B` bricht ab.
+
+**Absturz beim Beenden behoben (1.8.0).** `player.stop()` lief im UI-Thread;
+bei einem hängenden Stream blockierte das die gesamte Oberfläche, die App ließ
+sich nicht einmal per SIGTERM beenden (nur `kill -9`). Dazu:
+
+- Spur- und Bildabfragen greifen nach `stop()` nicht mehr auf den abbauenden
+  Player zu (führte zu `SIGSEGV in libc`).
+- Erinnerungen laufen über `notify-send` statt `java.awt.SystemTray` — dessen
+  Initialisierung kann auf GNOME den AWT-Thread blockieren.
+- EPG-Abfrage der Glocke läuft in `Dispatchers.IO`, nicht im Zeichen-Thread.
+
 ### 1.5.39 — 19.10.2026
 - **Live-TV-Gruppen** im Multi-Line-Modus nur noch **einmal** — Kategorien
   nach Name dedupliziert, Kanal-`categoryId` auf die kanonische ID je Gruppe
