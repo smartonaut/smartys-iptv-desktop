@@ -64,8 +64,8 @@ fun SearchScreen(
             value = query,
             onValueChange = { query = it },
             singleLine = true,
-            placeholder = { Text("Sender, Filme oder Serien suchen …", color = TextMid) },
-            leadingIcon = { Text("🔍", color = TextMid, fontSize = 15.sp) },
+            placeholder = { Text(I18n.s("Sender, Filme oder Serien suchen …"), color = TextMid) },
+            leadingIcon = { Text(I18n.s("🔍"), color = TextMid, fontSize = 15.sp) },
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp)

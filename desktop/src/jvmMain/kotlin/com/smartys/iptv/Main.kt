@@ -96,7 +96,7 @@ fun App() {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(s.message, color = TextHi, fontSize = 15.sp)
                         Spacer(Modifier.height(12.dp))
-                        Button(onClick = { vm.retry() }, colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)) { Text("Erneut versuchen") }
+                        Button(onClick = { vm.retry() }, colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)) { Text(I18n.s("Erneut versuchen")) }
                     }
                 }
                 is AppState.Ready -> {
@@ -213,7 +213,7 @@ fun TabBar(selected: Tab, onSelect: (Tab) -> Unit) {
         Modifier.fillMaxWidth().background(Sidebar).padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text("Smartys IPTV", color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(I18n.s("Smartys IPTV"), color = Accent, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(24.dp))
         Tab.entries.forEach { t ->
             val active = t == selected
@@ -250,16 +250,16 @@ fun PairingScreen(vm: DesktopViewModel) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Smartys Player", fontSize = if (compact) 26.sp else 38.sp, fontWeight = FontWeight.Bold, color = Accent)
+        Text(I18n.s("Smartys Player"), fontSize = if (compact) 26.sp else 38.sp, fontWeight = FontWeight.Bold, color = Accent)
         Spacer(Modifier.height(4.dp))
-        Text("Player freischalten", color = Color.Gray, fontSize = 15.sp)
+        Text(I18n.s("Player freischalten"), color = Color.Gray, fontSize = 15.sp)
         Spacer(Modifier.height(if (compact) 10.dp else 28.dp))
 
         Column(
             Modifier.background(Card, MaterialTheme.shapes.large).padding(horizontal = if (compact) 20.dp else 36.dp, vertical = if (compact) 12.dp else 22.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Deine Player-ID", color = TextMid, fontSize = 13.sp)
+            Text(I18n.s("Deine Player-ID"), color = TextMid, fontSize = 13.sp)
             Text(
                 playerId, fontSize = if (compact) 18.sp else 26.sp, fontWeight = FontWeight.Bold, color = TextHi,
                 modifier = Modifier.clickable {
@@ -268,7 +268,7 @@ fun PairingScreen(vm: DesktopViewModel) {
                 }
             )
             Spacer(Modifier.height(14.dp))
-            Text("Dein Passwort", color = TextMid, fontSize = 13.sp)
+            Text(I18n.s("Dein Passwort"), color = TextMid, fontSize = 13.sp)
             Text(
                 pairingPw, fontSize = if (compact) 18.sp else 26.sp, fontWeight = FontWeight.Bold, color = Accent,
                 modifier = Modifier.clickable {
@@ -288,7 +288,7 @@ fun PairingScreen(vm: DesktopViewModel) {
                     .background(Color.White).padding(if (compact) 8.dp else 10.dp)
             )
             Spacer(Modifier.height(6.dp))
-            Text("QR-Code mit dem Handy scannen", color = TextMid, fontSize = 12.sp)
+            Text(I18n.s("QR-Code mit dem Handy scannen"), color = TextMid, fontSize = 12.sp)
         }
         if (!compact) {
             Spacer(Modifier.height(24.dp))
@@ -321,7 +321,7 @@ fun PairingScreen(vm: DesktopViewModel) {
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)
             ) {
-                Text("Prüfen — Playlist laden", Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(I18n.s("Prüfen — Playlist laden"), Modifier.padding(horizontal = 26.dp, vertical = 6.dp), fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
             Spacer(Modifier.height(10.dp))
             // Demo-Modus: sofort reinschauen ohne eigene Playlist
@@ -329,7 +329,7 @@ fun PairingScreen(vm: DesktopViewModel) {
                 onClick = { vm.startDemoMode() },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Accent)
             ) {
-                Text("Demo starten — ohne Einrichtung", Modifier.padding(horizontal = 22.dp, vertical = 4.dp), fontSize = 14.sp)
+                Text(I18n.s("Demo starten — ohne Einrichtung"), Modifier.padding(horizontal = 22.dp, vertical = 4.dp), fontSize = 14.sp)
             }
             Spacer(Modifier.height(8.dp))
             msg?.let { Text(it, color = TextMid, fontSize = 14.sp, modifier = Modifier.padding(top = 10.dp)) }
@@ -352,9 +352,9 @@ fun UnlockScreen(vm: DesktopViewModel, name: String) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Text("Smartys Player", fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Accent)
+        Text(I18n.s("Smartys Player"), fontSize = 38.sp, fontWeight = FontWeight.Bold, color = Accent)
         Spacer(Modifier.height(4.dp))
-        Text("Lines entschlüsseln", color = Color.Gray, fontSize = 15.sp)
+        Text(I18n.s("Lines entschlüsseln"), color = Color.Gray, fontSize = 15.sp)
         Spacer(Modifier.height(28.dp))
 
         Column(
@@ -373,7 +373,7 @@ fun UnlockScreen(vm: DesktopViewModel, name: String) {
                 onValueChange = { pw = it; error = false },
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
-                label = { Text("Sicherheits-Passwort") },
+                label = { Text(I18n.s("Sicherheits-Passwort")) },
                 isError = error,
                 modifier = Modifier.width(280.dp)
             )
@@ -394,12 +394,12 @@ fun UnlockScreen(vm: DesktopViewModel, name: String) {
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)
                 ) {
-                    Text("Entsperren — Playlist laden", Modifier.padding(horizontal = 20.dp, vertical = 6.dp), fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text(I18n.s("Entsperren — Playlist laden"), Modifier.padding(horizontal = 20.dp, vertical = 6.dp), fontSize = 15.sp, fontWeight = FontWeight.Bold)
                 }
             }
             if (error) {
                 Spacer(Modifier.height(10.dp))
-                Text("Falsches Passwort — bitte erneut versuchen.", color = Color(0xFFE57373), fontSize = 13.sp)
+                Text(I18n.s("Falsches Passwort — bitte erneut versuchen."), color = Color(0xFFE57373), fontSize = 13.sp)
             }
         }
         Spacer(Modifier.height(20.dp))
@@ -410,7 +410,7 @@ fun UnlockScreen(vm: DesktopViewModel, name: String) {
         )
         Spacer(Modifier.height(8.dp))
         TextButton(onClick = { vm.cancelUnlock() }) {
-            Text("Zurück zur Einrichtung", color = TextMid, fontSize = 13.sp)
+            Text(I18n.s("Zurück zur Einrichtung"), color = TextMid, fontSize = 13.sp)
         }
     }
 }
@@ -423,6 +423,8 @@ fun main(args: Array<String>) {
     }
     application {
         extractReadme()
+        // Sprache aus den Einstellungen laden (muss vor dem ersten Frame passieren)
+        I18n.laden()
         // Sendungserinnerungen: lädt gespeicherte und startet den Prüf-Timer
         runCatching { Erinnerungen.start() }
         val icon = loadWindowIcon()
@@ -430,7 +432,18 @@ fun main(args: Array<String>) {
             FullscreenController.window = this.window
             // Gespeicherte Einstellung "Im Vordergrund halten" beim Start anwenden.
             runCatching { this.window.isAlwaysOnTop = AppSettings.alwaysOnTop() }
-            App()
+            // Sprachwechsel: key() erzwingt eine frische Komposition des ganzen
+            // Baums, sonst behalten bereits gezeichnete Screens ihre Texte.
+            // Persisch und Urdu laufen zusätzlich von rechts nach links.
+            androidx.compose.runtime.key(I18n.version) {
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalLayoutDirection provides
+                        if (I18n.istRtl()) androidx.compose.ui.unit.LayoutDirection.Rtl
+                        else androidx.compose.ui.unit.LayoutDirection.Ltr
+                ) {
+                    App()
+                }
+            }
         }
     }
 }

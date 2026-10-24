@@ -371,7 +371,7 @@ private fun EdgeStrip(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
-                Text("▲", color = Accent, fontSize = 20.sp,
+                Text(I18n.s("▲"), color = Accent, fontSize = 20.sp,
                     modifier = Modifier.clickable(onClick = onIncrement).padding(vertical = 10.dp))
                 // Pegelbalken (vertikal, auf leicht dunklem Track für Kontrast)
                 Box(
@@ -387,7 +387,7 @@ private fun EdgeStrip(
                     )
                 }
                 Text(valueLabel, color = TextHi, fontSize = 12.sp)
-                Text("▼", color = Accent, fontSize = 20.sp,
+                Text(I18n.s("▼"), color = Accent, fontSize = 20.sp,
                     modifier = Modifier.clickable(onClick = onDecrement).padding(vertical = 10.dp))
             }
         }
@@ -670,7 +670,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Accent)
                     Spacer(Modifier.height(14.dp))
-                    Text("Verbinde…", color = TextHi, fontSize = 15.sp)
+                    Text(I18n.s("Verbinde…"), color = TextHi, fontSize = 15.sp)
                 }
             }
         }
@@ -680,7 +680,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             Modifier.fillMaxWidth().background(Color(0xAA0B0E14)).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
+            Text(I18n.s("←"), color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
             Text(ch.name, color = TextHi, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
 
@@ -734,21 +734,21 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         AlertDialog(
             onDismissRequest = { showRecDialog = false },
             containerColor = Card,
-            title = { Text("Aufnahme starten", color = TextHi) },
-            text = { Text("Wie soll aufgenommen werden?", color = TextMid) },
+            title = { Text(I18n.s("Aufnahme starten"), color = TextHi) },
+            text = { Text(I18n.s("Wie soll aufgenommen werden?"), color = TextMid) },
             confirmButton = {
                 TextButton(onClick = {
                     showRecDialog = false
                     recMode = if (startAdhocRecording(recEngine, vm, ch, AdhocRecMode.CURRENT_SHOW)) AdhocRecMode.CURRENT_SHOW else null
-                }) { Text("Laufende Sendung", color = Accent) }
+                }) { Text(I18n.s("Laufende Sendung"), color = Accent) }
             },
             dismissButton = {
                 Column(horizontalAlignment = Alignment.End) {
                     TextButton(onClick = {
                         showRecDialog = false
                         recMode = if (startAdhocRecording(recEngine, vm, ch, AdhocRecMode.ENDLESS)) AdhocRecMode.ENDLESS else null
-                    }) { Text("Endlos (bis S)", color = TextHi) }
-                    TextButton(onClick = { showRecDialog = false }) { Text("Abbrechen", color = TextMid) }
+                    }) { Text(I18n.s("Endlos (bis S)"), color = TextHi) }
+                    TextButton(onClick = { showRecDialog = false }) { Text(I18n.s("Abbrechen"), color = TextMid) }
                 }
             }
         )
@@ -940,7 +940,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     CircularProgressIndicator(color = Accent)
                     Spacer(Modifier.height(14.dp))
-                    Text("Lade…", color = TextHi, fontSize = 15.sp)
+                    Text(I18n.s("Lade…"), color = TextHi, fontSize = 15.sp)
                 }
             }
         }
@@ -950,7 +950,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             Modifier.fillMaxWidth().background(Color(0xAA0B0E14)).padding(horizontal = 12.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
+            Text(I18n.s("←"), color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
             Text(vp.title, color = TextHi, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
 
@@ -987,7 +987,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                     )
                     DropdownMenu(expanded = ccMenu, onDismissRequest = { ccMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text("Aus", fontSize = 13.sp) },
+                            text = { Text(I18n.s("Aus"), fontSize = 13.sp) },
                             onClick = {
                                 player.waehleUntertitel(-1)
                                 aktiverCc = null

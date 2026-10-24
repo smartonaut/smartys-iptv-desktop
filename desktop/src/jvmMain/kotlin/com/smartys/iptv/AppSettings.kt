@@ -78,6 +78,13 @@ object AppSettings {
 
     fun setAlwaysOnTop(enabled: Boolean) = set("always_on_top", enabled.toString())
 
+    // ---------- Sprache (Deutsch/Englisch) ----------
+
+    /** "de" (Standard) oder "en". */
+    fun language(): String = get("language", "de")
+
+    fun setLanguage(code: String) = set("language", code)
+
     // ---------- Video-Decoding (automatisch erkannt) ----------
 
     /**

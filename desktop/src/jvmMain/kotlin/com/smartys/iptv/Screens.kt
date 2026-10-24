@@ -98,7 +98,7 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
         // Kategorien-Sidebar
         LazyColumn(Modifier.width(250.dp).fillMaxHeight().background(Sidebar)) {
             item {
-                Text("Alle Kanäle",
+                Text(I18n.s("Alle Kanäle"),
                     color = if (selectedCat == null && !favMode) Accent else TextMid,
                     fontWeight = FontWeight.Bold, fontSize = 15.sp,
                     modifier = Modifier.fillMaxWidth().clickable { selectedCat = null; favMode = false }.padding(16.dp))
@@ -121,7 +121,7 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                     ).padding(horizontal = 16.dp, vertical = 8.dp))
             }
             item {
-                Text("🎯 Gruppen markieren",
+                Text(I18n.s("🎯 Gruppen markieren"),
                     color = Accent, fontSize = 12.sp,
                     modifier = Modifier.fillMaxWidth().clickable {
                         catMenuMulti = true
@@ -184,7 +184,7 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                     shape = RoundedCornerShape(8.dp), color = Card,
                     modifier = Modifier.clickable { onMultiView() }
                 ) {
-                    Text("▦ Multi-View", color = Accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    Text(I18n.s("▦ Multi-View"), color = Accent, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                 }
             }
 
@@ -200,7 +200,7 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                         shape = RoundedCornerShape(8.dp), color = Card,
                         modifier = Modifier.clickable { onStop() }
                     ) {
-                        Text("■ Stopp", color = TextHi, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        Text(I18n.s("■ Stopp"), color = TextHi, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
                     }
                 }
             }
@@ -283,7 +283,7 @@ private fun ChannelRow(ch: LiveStream, vm: DesktopViewModel, isFav: Boolean, onT
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 if (ChannelPrefs.isLocked(ch.streamId)) {
-                    Text("🔒 ", color = Accent, fontSize = 13.sp)
+                    Text(I18n.s("🔒 "), color = Accent, fontSize = 13.sp)
                 }
                 Text(ch.name, color = TextHi, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -348,7 +348,7 @@ fun CategoryMenuDialog(
                     }
                 }
                 else -> Column {
-                    Text("Anklicken markiert. MARKIERT = BEHALTEN.", color = TextMid, fontSize = 13.sp)
+                    Text(I18n.s("Anklicken markiert. MARKIERT = BEHALTEN."), color = TextMid, fontSize = 13.sp)
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         MiniBtn("✅ Alle markieren") { marked = visible.map { it.id }.toSet() }
@@ -424,7 +424,7 @@ fun CategoryMenuDialog(
             }
         },
         dismissButton = if (mode == 1) {
-            { TextButton(onClick = { marked = setOf(cat.id); mode = 0 }) { Text("← Zurück", color = TextMid) } }
+            { TextButton(onClick = { marked = setOf(cat.id); mode = 0 }) { Text(I18n.s("← Zurück"), color = TextMid) } }
         } else null
     )
 }
@@ -463,7 +463,7 @@ private fun ChannelMenuDialog(
                 MenuItem(if (ChannelPrefs.isLocked(ch.streamId)) "FSK18-Sperre aufheben" else "FSK18 sperren (PIN)", onLock)
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen", color = Accent) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text(I18n.s("Schließen"), color = Accent) } }
     )
 }
 
@@ -503,7 +503,7 @@ fun PinDialog(
                 )
                 if (error) {
                     Spacer(Modifier.height(8.dp))
-                    Text("Falsche PIN", color = Danger, fontSize = 13.sp)
+                    Text(I18n.s("Falsche PIN"), color = Danger, fontSize = 13.sp)
                 }
             }
         },
@@ -515,9 +515,9 @@ fun PinDialog(
                 } else {
                     onSetPin(pin)
                 }
-            }) { Text("OK", color = Accent) }
+            }) { Text(I18n.s("OK"), color = Accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen", color = TextMid) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(I18n.s("Abbrechen"), color = TextMid) } }
     )
 }
 
@@ -555,7 +555,7 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
     Row(Modifier.fillMaxSize().background(Bg)) {
         LazyColumn(Modifier.width(250.dp).fillMaxHeight().background(Sidebar)) {
             item {
-                Text("Alle Filme",
+                Text(I18n.s("Alle Filme"),
                     color = if (selectedCat == null) Accent else TextMid,
                     fontWeight = FontWeight.Bold, fontSize = 15.sp,
                     modifier = Modifier.fillMaxWidth().clickable { selectedCat = null }.padding(16.dp))
@@ -582,7 +582,7 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
         }
         Box(Modifier.weight(1f).padding(16.dp)) {
             if (applied.isEmpty()) {
-                CenteredBox { Text("Keine Filme in dieser Kategorie", color = TextMid) }
+                CenteredBox { Text(I18n.s("Keine Filme in dieser Kategorie"), color = TextMid) }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(150.dp),
@@ -656,7 +656,7 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
 
     Column(Modifier.fillMaxSize().background(Bg).padding(24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
+            Text(I18n.s("←"), color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
             Text(m.name, color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Spacer(Modifier.height(20.dp))
@@ -683,12 +683,12 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                 if (tmdbNote != null) {
                     val stimmen = meta?.voteCount
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("★", color = Accent, fontSize = 15.sp)
+                        Text(I18n.s("★"), color = Accent, fontSize = 15.sp)
                         Text(
                             String.format(java.util.Locale.GERMAN, "%.1f", tmdbNote).replace('.', ','),
                             color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.Bold
                         )
-                        Text("/ 10", color = TextMid, fontSize = 12.sp)
+                        Text(I18n.s("/ 10"), color = TextMid, fontSize = 12.sp)
                         if (stimmen != null && stimmen > 0) {
                             Text("· ${String.format("%,d", stimmen)} Stimmen", color = TextMid, fontSize = 12.sp)
                         }
@@ -706,13 +706,13 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
 
                 // Beschreibung (TMDB overview oder Fallback)
                 if (metaLoading) {
-                    Text("Beschreibung lädt…", color = TextMid, fontSize = 13.sp)
+                    Text(I18n.s("Beschreibung lädt…"), color = TextMid, fontSize = 13.sp)
                 } else {
                     val desc = meta?.overview
                     if (desc != null) {
                         Text(desc, color = TextHi, fontSize = 14.sp, lineHeight = 20.sp)
                     } else {
-                        Text("Keine Beschreibung verfügbar.", color = TextMid, fontSize = 13.sp)
+                        Text(I18n.s("Keine Beschreibung verfügbar."), color = TextMid, fontSize = 13.sp)
                     }
                     meta?.let { mm ->
                         if (mm.genres.isNotEmpty() || mm.runtime != null) {
@@ -749,7 +749,7 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                             contentColor = if (resumePos > 0) TextHi else AccentDark
                         )
                     ) {
-                        Text("Von vorne abspielen", fontWeight = FontWeight.Bold)
+                        Text(I18n.s("Von vorne abspielen"), fontWeight = FontWeight.Bold)
                     }
                     // Herunterladen (User-Vorgabe): kompletter Film als Datei —
                     // läuft mit Fortschritt und taucht im Aufnahmen-Tab auf.
@@ -760,7 +760,7 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                             Text("⏳ Herunterladen … ${(dlState.progress * 100).toInt()} % — pausieren", color = TextHi)
                         }
                         "paused" -> OutlinedButton(onClick = { VodDownloader.resume(dlId) }) {
-                            Text("▶ Download fortsetzen", color = TextHi)
+                            Text(I18n.s("▶ Download fortsetzen"), color = TextHi)
                         }
                         "complete" -> Text(
                             "✓ Heruntergeladen — im Tab Aufnahmen", color = Color(0xFF6FCF9F), fontSize = 13.sp
@@ -768,12 +768,12 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                         "error" -> OutlinedButton(onClick = {
                             if (url != null) VodDownloader.start(dlId, m.name, url, m.containerExtension ?: "mp4")
                         }) {
-                            Text("⚠ Download fehlgeschlagen — erneut versuchen", color = TextHi)
+                            Text(I18n.s("⚠ Download fehlgeschlagen — erneut versuchen"), color = TextHi)
                         }
                         else -> OutlinedButton(onClick = {
                             if (url != null) VodDownloader.start(dlId, m.name, url, m.containerExtension ?: "mp4")
                         }) {
-                            Text("⬇ Herunterladen", color = TextHi)
+                            Text(I18n.s("⬇ Herunterladen"), color = TextHi)
                         }
                     }
                     // Trailer (wenn vorhanden)
@@ -789,7 +789,7 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                                 }
                             }
                         }) {
-                            Text("▶ Trailer ansehen", color = TextHi)
+                            Text(I18n.s("▶ Trailer ansehen"), color = TextHi)
                         }
                     }
                 }
@@ -831,7 +831,7 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
     Row(Modifier.fillMaxSize().background(Bg)) {
         LazyColumn(Modifier.width(250.dp).fillMaxHeight().background(Sidebar)) {
             item {
-                Text("Alle Serien",
+                Text(I18n.s("Alle Serien"),
                     color = if (selectedCat == null) Accent else TextMid,
                     fontWeight = FontWeight.Bold, fontSize = 15.sp,
                     modifier = Modifier.fillMaxWidth().clickable { selectedCat = null }.padding(16.dp))
@@ -858,7 +858,7 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
         }
         Box(Modifier.weight(1f).padding(16.dp)) {
             if (applied.isEmpty()) {
-                CenteredBox { Text("Keine Serien in dieser Kategorie", color = TextMid) }
+                CenteredBox { Text(I18n.s("Keine Serien in dieser Kategorie"), color = TextMid) }
             } else {
                 LazyVerticalGrid(
                     columns = GridCells.Adaptive(150.dp),
@@ -926,7 +926,7 @@ fun SeriesDetailScreen(
             Modifier.fillMaxWidth().background(Sidebar).padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 16.dp))
+            Text(I18n.s("←"), color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 16.dp))
             Text(show.name, color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
 
@@ -945,7 +945,7 @@ fun SeriesDetailScreen(
                 if (loading) {
                     // noch keine Episodendaten — keine Buttons
                 } else if (allEps.isEmpty()) {
-                    Text("Keine Episoden gefunden", color = TextMid, fontSize = 13.sp)
+                    Text(I18n.s("Keine Episoden gefunden"), color = TextMid, fontSize = 13.sp)
                 } else if (last != null) {
                     val idx = allEps.indexOfFirst { it.id == last.first }
                     if (idx >= 0) {
@@ -965,7 +965,7 @@ fun SeriesDetailScreen(
                             onClick = { onPlayEpisode(allEps, 0, 0L) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Von vorne abspielen", color = TextHi, fontSize = 13.sp)
+                            Text(I18n.s("Von vorne abspielen"), color = TextHi, fontSize = 13.sp)
                         }
                     }
                 } else {
@@ -974,7 +974,7 @@ fun SeriesDetailScreen(
                         colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text("▶ Erste Episode abspielen", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        Text(I18n.s("▶ Erste Episode abspielen"), fontWeight = FontWeight.Bold, fontSize = 13.sp)
                     }
                 }
             }
@@ -985,7 +985,7 @@ fun SeriesDetailScreen(
             } else {
                 val seasons = info.toSeasons()
                 if (seasons.isEmpty()) {
-                    CenteredBox { Text("Keine Episoden gefunden", color = TextMid) }
+                    CenteredBox { Text(I18n.s("Keine Episoden gefunden"), color = TextMid) }
                 } else {
                     LazyColumn(Modifier.weight(1f).padding(end = 20.dp, top = 20.dp, bottom = 20.dp)) {
                         seasons.forEach { season ->
@@ -1032,11 +1032,11 @@ private fun EpisodeRow(vm: DesktopViewModel, show: SeriesStream, ep: SeriesEpiso
                     CircularProgressIndicator(color = Accent, modifier = Modifier.size(20.dp))
                     Text("${(dlState.progress * 100).toInt()}%", color = TextMid, fontSize = 11.sp)
                 }
-                "paused" -> Text("▶", color = Accent, fontSize = 18.sp, modifier = Modifier.clickable { VodDownloader.resume(dlId) }.padding(6.dp))
-                "complete" -> Text("✓", color = Color(0xFF6FCF9F), fontSize = 18.sp)
-                "error" -> Text("⚠", color = Danger, fontSize = 18.sp,
+                "paused" -> Text(I18n.s("▶"), color = Accent, fontSize = 18.sp, modifier = Modifier.clickable { VodDownloader.resume(dlId) }.padding(6.dp))
+                "complete" -> Text(I18n.s("✓"), color = Color(0xFF6FCF9F), fontSize = 18.sp)
+                "error" -> Text(I18n.s("⚠"), color = Danger, fontSize = 18.sp,
                     modifier = Modifier.clickable { VodDownloader.start(dlId, "$show.name — $epTitle", url, ep.containerExtension ?: "mp4") }.padding(6.dp))
-                else -> Text("⬇", color = TextMid, fontSize = 18.sp,
+                else -> Text(I18n.s("⬇"), color = TextMid, fontSize = 18.sp,
                     modifier = Modifier.clickable {
                         VodDownloader.start(dlId, "$show.name — $epTitle", url, ep.containerExtension ?: "mp4")
                     }.padding(6.dp))
@@ -1082,7 +1082,7 @@ private fun SpeicherZeile() {
 
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card).padding(14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Speicher", color = TextHi, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Text(I18n.s("Speicher"), color = TextHi, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.weight(1f))
             Text(
                 "${fmtGroesse(frei)} frei von ${fmtGroesse(gesamt)}",
@@ -1106,7 +1106,7 @@ private fun SpeicherZeile() {
         }
         if (knapp) {
             Spacer(Modifier.height(6.dp))
-            Text("Wenig Platz — alte Downloads löschen.", color = Danger, fontSize = 11.sp)
+            Text(I18n.s("Wenig Platz — alte Downloads löschen."), color = Danger, fontSize = 11.sp)
         }
     }
 }
@@ -1119,7 +1119,7 @@ fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String)
     val complete = VodDownloader.items.filter { it.status == "complete" }
 
     Column(Modifier.fillMaxSize().background(Bg).padding(20.dp)) {
-        Text("Offline-Downloads", color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(I18n.s("Offline-Downloads"), color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
 
         // Speicheranzeige (Parität zur iOS-App): frei, belegt, Download-Anteil
@@ -1128,7 +1128,7 @@ fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String)
 
         if (complete.isEmpty()) {
             CenteredBox {
-                Text("Noch keine Downloads.\nFilme und Serien-Episoden kannst du in den jeweiligen Bereichen herunterladen.",
+                Text(I18n.s("Noch keine Downloads.\nFilme und Serien-Episoden kannst du in den jeweiligen Bereichen herunterladen."),
                     color = TextMid, fontSize = 14.sp, textAlign = TextAlign.Center)
             }
         } else {
@@ -1146,10 +1146,10 @@ fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String)
                             Text(String.format("%.0f MB", sizeMb), color = TextMid, fontSize = 12.sp)
                         }
                         if (file != null) {
-                            Text("▶", color = Accent, fontSize = 20.sp,
+                            Text(I18n.s("▶"), color = Accent, fontSize = 20.sp,
                                 modifier = Modifier.clickable { onPlay(file, d.title, d.id) }.padding(horizontal = 10.dp))
                         }
-                        Text("🗑", color = Danger, fontSize = 18.sp,
+                        Text(I18n.s("🗑"), color = Danger, fontSize = 18.sp,
                             modifier = Modifier.clickable { deleteConfirmFor = d }.padding(horizontal = 10.dp))
                     }
                 }
@@ -1161,15 +1161,15 @@ fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String)
         AlertDialog(
             onDismissRequest = { deleteConfirmFor = null },
             containerColor = Card,
-            title = { Text("Download löschen?", color = TextHi) },
+            title = { Text(I18n.s("Download löschen?"), color = TextHi) },
             text = { Text(d.title, color = TextMid) },
             confirmButton = {
                 TextButton(onClick = { VodDownloader.delete(d.id); deleteConfirmFor = null }) {
-                    Text("Löschen", color = Danger)
+                    Text(I18n.s("Löschen"), color = Danger)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { deleteConfirmFor = null }) { Text("Abbrechen", color = TextMid) }
+                TextButton(onClick = { deleteConfirmFor = null }) { Text(I18n.s("Abbrechen"), color = TextMid) }
             }
         )
     }

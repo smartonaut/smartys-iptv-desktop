@@ -41,10 +41,10 @@ fun RecordingsScreen(vm: DesktopViewModel, state: AppState.Ready,
 
     Column(Modifier.fillMaxSize().background(Bg).padding(24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Aufnahmen", color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(I18n.s("Aufnahmen"), color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.weight(1f))
             if (vm.isRecording()) {
-                Text("● Aufnahme läuft", color = Danger, fontSize = 13.sp)
+                Text(I18n.s("● Aufnahme läuft"), color = Danger, fontSize = 13.sp)
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -52,18 +52,18 @@ fun RecordingsScreen(vm: DesktopViewModel, state: AppState.Ready,
         // Buttons: EPG-Auswahl + manueller Timer
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Button(onClick = { mode = RecordMode.Epg }, colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = AccentDark)) {
-                Text("Aus EPG aufnehmen", fontWeight = FontWeight.Bold)
+                Text(I18n.s("Aus EPG aufnehmen"), fontWeight = FontWeight.Bold)
             }
             OutlinedButton(onClick = { mode = RecordMode.Manual }) {
-                Text("Manueller Timer", color = TextHi)
+                Text(I18n.s("Manueller Timer"), color = TextHi)
             }
         }
         Spacer(Modifier.height(20.dp))
 
         if (recordings.isEmpty()) {
-            Text("Keine geplanten Aufnahmen.", color = TextMid, fontSize = 14.sp)
+            Text(I18n.s("Keine geplanten Aufnahmen."), color = TextMid, fontSize = 14.sp)
         } else {
-            Text("Geplante Aufnahmen", color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+            Text(I18n.s("Geplante Aufnahmen"), color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
             Spacer(Modifier.height(8.dp))
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(recordings, key = { it.id }) { r ->
@@ -79,10 +79,10 @@ fun RecordingsScreen(vm: DesktopViewModel, state: AppState.Ready,
 
         // ---- Heruntergeladene Filme & Episoden ----
         val dls = VodDownloader.items
-        Text("Heruntergeladene Filme & Episoden", color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+        Text(I18n.s("Heruntergeladene Filme & Episoden"), color = Accent, fontSize = 15.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
         if (dls.isEmpty()) {
-            Text("Noch keine Downloads. Filme lädst du über den ⬇-Button auf der Detailseite.", color = TextMid, fontSize = 13.sp)
+            Text(I18n.s("Noch keine Downloads. Filme lädst du über den ⬇-Button auf der Detailseite."), color = TextMid, fontSize = 13.sp)
         } else {
             LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(dls, key = { it.id }) { d ->
@@ -117,7 +117,7 @@ private fun RecordingRow(r: RecordingStore.Recording, onDelete: () -> Unit) {
                 color = TextMid, fontSize = 12.sp)
         }
         Spacer(Modifier.width(10.dp))
-        Text("🗑", color = Danger, fontSize = 16.sp, modifier = Modifier.clickable(onClick = onDelete).padding(8.dp))
+        Text(I18n.s("🗑"), color = Danger, fontSize = 16.sp, modifier = Modifier.clickable(onClick = onDelete).padding(8.dp))
     }
 }
 
@@ -141,13 +141,13 @@ private fun DownloadedRow(d: DownloadItem, onPlay: (java.io.File, String, String
         }
         Spacer(Modifier.width(10.dp))
         if (d.status == "complete") {
-            Text("▶", color = Accent, fontSize = 18.sp,
+            Text(I18n.s("▶"), color = Accent, fontSize = 18.sp,
                 modifier = Modifier.clickable { onPlay(file, d.title, d.id) }.padding(horizontal = 10.dp))
         } else if (d.status == "paused") {
-            Text("▶", color = Accent, fontSize = 18.sp,
+            Text(I18n.s("▶"), color = Accent, fontSize = 18.sp,
                 modifier = Modifier.clickable { VodDownloader.resume(d.id) }.padding(horizontal = 10.dp))
         }
-        Text("🗑", color = Danger, fontSize = 16.sp,
+        Text(I18n.s("🗑"), color = Danger, fontSize = 16.sp,
             modifier = Modifier.clickable { VodDownloader.delete(d.id) }.padding(8.dp))
     }
 }
@@ -179,12 +179,12 @@ private fun EpgRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDismi
                     Text(selectedChannel!!.name, color = Accent, fontSize = 14.sp, fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable { selectedChannel = null }.padding(bottom = 8.dp))
                     if (programmes.isEmpty()) {
-                        Text("Keine EPG-Daten für diesen Kanal.", color = TextMid, fontSize = 13.sp)
+                        Text(I18n.s("Keine EPG-Daten für diesen Kanal."), color = TextMid, fontSize = 13.sp)
                     } else {
                         // Nur laufende + zukünftige Sendungen anzeigen (vergangene sind nicht aufnehmbar)
                         val upcoming = programmes.filter { it.stop > System.currentTimeMillis() }
                         if (upcoming.isEmpty()) {
-                            Text("Keine laufenden/zukünftigen Sendungen.", color = TextMid, fontSize = 13.sp)
+                            Text(I18n.s("Keine laufenden/zukünftigen Sendungen."), color = TextMid, fontSize = 13.sp)
                         } else {
                             LazyColumn {
                                 items(upcoming) { p ->
@@ -206,8 +206,8 @@ private fun EpgRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDismi
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Schließen", color = TextMid) } },
-        dismissButton = { if (selectedChannel != null) TextButton(onClick = { selectedChannel = null }) { Text("Zurück", color = Accent) } }
+        confirmButton = { TextButton(onClick = onDismiss) { Text(I18n.s("Schließen"), color = TextMid) } },
+        dismissButton = { if (selectedChannel != null) TextButton(onClick = { selectedChannel = null }) { Text(I18n.s("Zurück"), color = Accent) } }
     )
 
     // Bestätigungsfrage vor dem Aufnehmen
@@ -215,7 +215,7 @@ private fun EpgRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDismi
         AlertDialog(
             onDismissRequest = { pendingProgramme = null },
             containerColor = Card,
-            title = { Text("Diese Sendung aufnehmen?", color = TextHi) },
+            title = { Text(I18n.s("Diese Sendung aufnehmen?"), color = TextHi) },
             text = {
                 Column {
                     Text(p.title, color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -229,9 +229,9 @@ private fun EpgRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDismi
                     selectedChannel?.let { scheduleEpgRecording(vm, it, p) }
                     pendingProgramme = null
                     onSaved()
-                }) { Text("Aufnehmen", color = Accent) }
+                }) { Text(I18n.s("Aufnehmen"), color = Accent) }
             },
-            dismissButton = { TextButton(onClick = { pendingProgramme = null }) { Text("Abbrechen", color = TextMid) } }
+            dismissButton = { TextButton(onClick = { pendingProgramme = null }) { Text(I18n.s("Abbrechen"), color = TextMid) } }
         )
     }
 }
@@ -268,22 +268,22 @@ private fun ManualRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDi
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = Card,
-        title = { Text("Manueller Aufnahme-Timer", color = TextHi) },
+        title = { Text(I18n.s("Manueller Aufnahme-Timer"), color = TextHi) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text("Kanal", color = TextMid, fontSize = 12.sp)
+                Text(I18n.s("Kanal"), color = TextMid, fontSize = 12.sp)
                 Text(channel?.name ?: "Kanal wählen…", color = TextHi, fontSize = 15.sp,
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(6.dp)).background(Card)
                         .clickable { channelPicker = true }.padding(12.dp))
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(startHour, { startHour = it.filter(Char::isDigit).take(2) }, label = { Text("Stunde") }, modifier = Modifier.weight(1f))
-                    OutlinedTextField(startMin, { startMin = it.filter(Char::isDigit).take(2) }, label = { Text("Minute") }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(startHour, { startHour = it.filter(Char::isDigit).take(2) }, label = { Text(I18n.s("Stunde")) }, modifier = Modifier.weight(1f))
+                    OutlinedTextField(startMin, { startMin = it.filter(Char::isDigit).take(2) }, label = { Text(I18n.s("Minute")) }, modifier = Modifier.weight(1f))
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(durationMin, { durationMin = it.filter(Char::isDigit).take(3) }, label = { Text("Dauer (Minuten)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(durationMin, { durationMin = it.filter(Char::isDigit).take(3) }, label = { Text(I18n.s("Dauer (Minuten)")) }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(title, { title = it }, label = { Text("Titel (optional)") }, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(title, { title = it }, label = { Text(I18n.s("Titel (optional)")) }, modifier = Modifier.fillMaxWidth())
             }
         },
         confirmButton = {
@@ -295,16 +295,16 @@ private fun ManualRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDi
                 if (dur <= 0) return@TextButton
                 scheduleManualRecording(vm, ch, h, m, dur, title.ifBlank { ch.name })
                 onSaved()
-            }) { Text("Anlegen", color = Accent) }
+            }) { Text(I18n.s("Anlegen"), color = Accent) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Abbrechen", color = TextMid) } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(I18n.s("Abbrechen"), color = TextMid) } }
     )
 
     if (channelPicker) {
         AlertDialog(
             onDismissRequest = { channelPicker = false },
             containerColor = Card,
-            title = { Text("Kanal wählen", color = TextHi) },
+            title = { Text(I18n.s("Kanal wählen"), color = TextHi) },
             text = {
                 LazyColumn(Modifier.height(360.dp)) {
                     items(state.channels, key = { it.streamId }) { ch ->
@@ -313,7 +313,7 @@ private fun ManualRecordDialog(vm: DesktopViewModel, state: AppState.Ready, onDi
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { channelPicker = false }) { Text("Schließen", color = TextMid) } }
+            confirmButton = { TextButton(onClick = { channelPicker = false }) { Text(I18n.s("Schließen"), color = TextMid) } }
         )
     }
 }

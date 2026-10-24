@@ -36,9 +36,9 @@ fun MultiViewScreen(channels: List<LiveStream>, vm: DesktopViewModel, onBack: ()
                 Modifier.fillMaxWidth().background(Card).padding(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("←", color = Accent, fontSize = 22.sp,
+                Text(I18n.s("←"), color = Accent, fontSize = 22.sp,
                     modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp))
-                Text("Multi-View — Kanäle wählen (max. 4)", color = TextHi, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(I18n.s("Multi-View — Kanäle wählen (max. 4)"), color = TextHi, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
                 Text("${selected.size}/4", color = TextMid, fontSize = 14.sp)
             }
@@ -81,11 +81,11 @@ fun MultiViewScreen(channels: List<LiveStream>, vm: DesktopViewModel, onBack: ()
                 Modifier.fillMaxWidth().background(Color(0xAA0B0E14)).padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("←", color = Accent, fontSize = 22.sp,
+                Text(I18n.s("←"), color = Accent, fontSize = 22.sp,
                     modifier = Modifier.clickable(onClick = onBack).padding(end = 12.dp))
                 Text("Multi-View (${selected.size})", color = TextHi, fontSize = 16.sp)
                 Spacer(Modifier.weight(1f))
-                Text("✕", color = TextHi, fontSize = 18.sp,
+                Text(I18n.s("✕"), color = TextHi, fontSize = 18.sp,
                     modifier = Modifier.clickable { started = false }.padding(horizontal = 8.dp))
             }
             Column(Modifier.fillMaxSize().padding(4.dp)) {
