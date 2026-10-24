@@ -1,4 +1,5 @@
 {
+ "   — aktiv: {0}": "   — actif : {0}",
  "+ Profil hinzufügen": "+ Ajouter un profil",
  "16:9 erzwingen": "Forcer le 16:9",
  "4-stelliger PIN": "PIN à 4 chiffres",
@@ -106,7 +107,10 @@
  "Zurück": "Retour",
  "Zurück zur Einrichtung": "Retour à la configuration",
  "aktiv": "actif",
+ "aktiv — Stream wird auf die Platte gepuffert": "actif — le flux est mis en mémoire tampon sur le disque",
+ "aus": "désactivé",
  "gesetzt": "défini",
+ "lade Lines …": "chargement des lignes …",
  "nicht gesetzt": "non défini",
  "{0} Kanäle": "{0} chaînes",
  "← Zurück": "Retour →",
@@ -119,5 +123,6 @@
  "⚙ {0} ausgeblendet — alle einblenden": "⚙ {0} masquées — tout afficher",
  "⚠ Download fehlgeschlagen — erneut versuchen": "⚠ Téléchargement échoué — réessayer",
  "⬇ Herunterladen": "⬇ Télécharger",
- "🎯 Gruppen markieren": "🎯 Sélectionner les groupes"
+ "🎯 Gruppen markieren": "🎯 Sélectionner les groupes",
+ "🔄 Lines vom Panel neu laden": "🔄 Recharger les lignes du panel"
 }

@@ -1,4 +1,5 @@
 {
+ "   — aktiv: {0}": "   — attivo: {0}",
  "+ Profil hinzufügen": "+ Aggiungi profilo",
  "16:9 erzwingen": "Forza 16:9",
  "4-stelliger PIN": "PIN di 4 cifre",
@@ -106,7 +107,10 @@
  "Zurück": "Indietro",
  "Zurück zur Einrichtung": "Torna alla configurazione",
  "aktiv": "attivo",
+ "aktiv — Stream wird auf die Platte gepuffert": "attivo — il flusso viene memorizzato su disco",
+ "aus": "spento",
  "gesetzt": "impostato",
+ "lade Lines …": "caricamento linee …",
  "nicht gesetzt": "non impostato",
  "{0} Kanäle": "{0} canali",
  "← Zurück": "Indietro →",
@@ -119,5 +123,6 @@
  "⚙ {0} ausgeblendet — alle einblenden": "⚙ {0} nascosti — mostrali tutti",
  "⚠ Download fehlgeschlagen — erneut versuchen": "⚠ Download non riuscito — riprova",
  "⬇ Herunterladen": "⬇ Scarica",
- "🎯 Gruppen markieren": "🎯 Seleziona gruppi"
+ "🎯 Gruppen markieren": "🎯 Seleziona gruppi",
+ "🔄 Lines vom Panel neu laden": "🔄 Ricarica linee dal panel"
 }

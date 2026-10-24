@@ -1,4 +1,5 @@
 {
+ "   — aktiv: {0}": "   — activo: {0}",
  "+ Profil hinzufügen": "+ Añadir perfil",
  "16:9 erzwingen": "Forzar 16:9",
  "4-stelliger PIN": "PIN de 4 dígitos",
@@ -106,7 +107,10 @@
  "Zurück": "Atrás",
  "Zurück zur Einrichtung": "Volver a la configuración",
  "aktiv": "activo",
+ "aktiv — Stream wird auf die Platte gepuffert": "activo — el flujo se almacena en disco",
+ "aus": "apagado",
  "gesetzt": "definido",
+ "lade Lines …": "cargando líneas …",
  "nicht gesetzt": "sin definir",
  "{0} Kanäle": "{0} canales",
  "← Zurück": "Atrás →",
@@ -119,5 +123,6 @@
  "⚙ {0} ausgeblendet — alle einblenden": "⚙ {0} ocultos — mostrar todos",
  "⚠ Download fehlgeschlagen — erneut versuchen": "⚠ Descarga fallida — reintentar",
  "⬇ Herunterladen": "⬇ Descargar",
- "🎯 Gruppen markieren": "🎯 Seleccionar grupos"
+ "🎯 Gruppen markieren": "🎯 Seleccionar grupos",
+ "🔄 Lines vom Panel neu laden": "🔄 Recargar líneas del panel"
 }

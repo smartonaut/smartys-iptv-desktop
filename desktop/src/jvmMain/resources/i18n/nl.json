@@ -1,4 +1,5 @@
 {
+ "   — aktiv: {0}": "   — actief: {0}",
  "+ Profil hinzufügen": "+ Profiel toevoegen",
  "16:9 erzwingen": "16:9 forceren",
  "4-stelliger PIN": "4-cijferige pincode",
@@ -106,7 +107,10 @@
  "Zurück": "Terug",
  "Zurück zur Einrichtung": "Terug naar instelling",
  "aktiv": "actief",
+ "aktiv — Stream wird auf die Platte gepuffert": "actief — stream wordt naar schijf gebufferd",
+ "aus": "uit",
  "gesetzt": "ingesteld",
+ "lade Lines …": "lijnen laden …",
  "nicht gesetzt": "niet ingesteld",
  "{0} Kanäle": "{0} zenders",
  "← Zurück": "← Terug",
@@ -119,5 +123,6 @@
  "⚙ {0} ausgeblendet — alle einblenden": "⚙ {0} verborgen — alles tonen",
  "⚠ Download fehlgeschlagen — erneut versuchen": "⚠ Download mislukt — opnieuw proberen",
  "⬇ Herunterladen": "⬇ Downloaden",
- "🎯 Gruppen markieren": "🎯 Groepen selecteren"
+ "🎯 Gruppen markieren": "🎯 Groepen selecteren",
+ "🔄 Lines vom Panel neu laden": "🔄 Lijnen opnieuw laden uit panel"
 }
