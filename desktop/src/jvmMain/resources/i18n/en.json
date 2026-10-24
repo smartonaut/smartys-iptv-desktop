@@ -1,4 +1,5 @@
 {
+ "   — aktiv: {0}": "   — active: {0}",
  "+ Profil hinzufügen": "+ Add profile",
  "16:9 erzwingen": "Force 16:9",
  "4-stelliger PIN": "4-digit PIN",
@@ -106,7 +107,10 @@
  "Zurück": "Back",
  "Zurück zur Einrichtung": "Back to setup",
  "aktiv": "active",
+ "aktiv — Stream wird auf die Platte gepuffert": "active — stream is buffered to disk",
+ "aus": "off",
  "gesetzt": "set",
+ "lade Lines …": "loading lines …",
  "nicht gesetzt": "not set",
  "{0} Kanäle": "{0} channels",
  "← Zurück": "← Back",
@@ -119,5 +123,6 @@
  "⚙ {0} ausgeblendet — alle einblenden": "⚙ {0} hidden — show all",
  "⚠ Download fehlgeschlagen — erneut versuchen": "⚠ Download failed — try again",
  "⬇ Herunterladen": "⬇ Download",
- "🎯 Gruppen markieren": "🎯 Select groups"
+ "🎯 Gruppen markieren": "🎯 Select groups",
+ "🔄 Lines vom Panel neu laden": "🔄 Reload lines from panel"
 }

@@ -1,4 +1,5 @@
 {
+ "   — aktiv: {0}": "   — فعال: {0}",
  "+ Profil hinzufügen": "+ افزودن پروفایل",
  "16:9 erzwingen": "اجبار ۱۶:۹",
  "4-stelliger PIN": "PIN چهاررقمی",
@@ -106,7 +107,10 @@
  "Zurück": "بازگشت",
  "Zurück zur Einrichtung": "بازگشت به تنظیمات",
  "aktiv": "فعال",
+ "aktiv — Stream wird auf die Platte gepuffert": "فعال — پخش در دیسک ذخیره می‌شود",
+ "aus": "خاموش",
  "gesetzt": "تنظیم‌شده",
+ "lade Lines …": "بارگذاری خطوط …",
  "nicht gesetzt": "تنظیم‌نشده",
  "{0} Kanäle": "{0} کانال",
  "← Zurück": "بازگشت →",
@@ -119,5 +123,6 @@
  "⚙ {0} ausgeblendet — alle einblenden": "⚙ {0} پنهان — نمایش همه",
  "⚠ Download fehlgeschlagen — erneut versuchen": "⚠ دانلود ناموفق بود — دوباره تلاش کنید",
  "⬇ Herunterladen": "⬇ دانلود",
- "🎯 Gruppen markieren": "🎯 انتخاب گروه‌ها"
+ "🎯 Gruppen markieren": "🎯 انتخاب گروه‌ها",
+ "🔄 Lines vom Panel neu laden": "🔄 بارگذاری مجدد خطوط از پنل"
 }

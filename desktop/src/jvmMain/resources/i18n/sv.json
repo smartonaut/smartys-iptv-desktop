@@ -1,4 +1,5 @@
 {
+ "   — aktiv: {0}": "   — aktiv: {0}",
  "+ Profil hinzufügen": "+ Lägg till profil",
  "16:9 erzwingen": "Tvinga 16:9",
  "4-stelliger PIN": "4-siffrig PIN-kod",
@@ -106,7 +107,10 @@
  "Zurück": "Tillbaka",
  "Zurück zur Einrichtung": "Tillbaka till installation",
  "aktiv": "aktiv",
+ "aktiv — Stream wird auf die Platte gepuffert": "aktiv — strömmen buffras till disk",
+ "aus": "av",
  "gesetzt": "inställd",
+ "lade Lines …": "laddar linjer …",
  "nicht gesetzt": "inte inställd",
  "{0} Kanäle": "{0} kanaler",
  "← Zurück": "← Tillbaka",
@@ -119,5 +123,6 @@
  "⚙ {0} ausgeblendet — alle einblenden": "⚙ {0} dolda — visa alla",
  "⚠ Download fehlgeschlagen — erneut versuchen": "⚠ Nedladdning misslyckades — försök igen",
  "⬇ Herunterladen": "⬇ Ladda ner",
- "🎯 Gruppen markieren": "🎯 Markera grupper"
+ "🎯 Gruppen markieren": "🎯 Markera grupper",
+ "🔄 Lines vom Panel neu laden": "🔄 Ladda om linjer från panelen"
 }

@@ -144,7 +144,7 @@ fun SettingsScreen(vm: DesktopViewModel) {
                 }
             ) {
                 Text(
-                    if (reloadingLines) "lade Lines …" else "🔄 Lines vom Panel neu laden",
+                    if (reloadingLines) I18n.s("lade Lines …") else I18n.s("🔄 Lines vom Panel neu laden"),
                     color = if (reloadingLines) TextMid else Accent
                 )
             }
@@ -154,7 +154,7 @@ fun SettingsScreen(vm: DesktopViewModel) {
         Text(
             if (knownLines.isEmpty()) "Keine Lines geladen."
             else "Lines (${knownLines.size}): " + knownLines.joinToString(" · ") { it.second } +
-                 "   — aktiv: ${vm.activeLineLabel.ifBlank { "—" }}",
+                 I18n.sf("   — aktiv: {0}", vm.activeLineLabel.ifBlank { "—" }),
             color = TextMid, fontSize = 12.sp
         )
 
@@ -195,7 +195,7 @@ fun SettingsScreen(vm: DesktopViewModel) {
             )
             Spacer(Modifier.width(10.dp))
             Text(
-                if (timeshiftEnabled) "aktiv — Stream wird auf die Platte gepuffert" else "aus",
+                if (timeshiftEnabled) I18n.s("aktiv — Stream wird auf die Platte gepuffert") else I18n.s("aus"),
                 color = TextMid, fontSize = 13.sp
             )
         }
