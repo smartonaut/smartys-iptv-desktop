@@ -63,6 +63,24 @@ fun Poster(url: String?, title: String, modifier: Modifier = Modifier, cornerRad
 @OptIn(ExperimentalFoundationApi::class)
 fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStream) -> Unit, onStop: () -> Unit = {}, floatingChannel: LiveStream? = null, onMultiView: () -> Unit = {}) {
     var selectedCat by remember { mutableStateOf<String?>(null) }
+    var zeigeEpg by remember { mutableStateOf(false) }
+
+    // Programm-Raster als eigene Ansicht (Parität zur iOS-App)
+    if (zeigeEpg) {
+        EpgGridScreen(
+            streams = state.channels,
+            epgBereit = XmltvEpg.isReady(),
+            epgStatus = if (vm.xmltvReady.value) null else I18n.s("EPG wird noch geladen."),
+            onEpgLaden = { vm.epgNachladen() },
+            onKanalWaehlen = { sender ->
+                zeigeEpg = false
+                onPlay(sender)
+            },
+            onZurueck = { zeigeEpg = false }
+        )
+        return
+    }
+
     var favMode by remember { mutableStateOf(false) }
     var sortMode by remember(vm.activeProfileId) { mutableStateOf(ChannelPrefs.sortMode()) }
     var channelMenuFor by remember { mutableStateOf<LiveStream?>(null) }
@@ -157,6 +175,17 @@ fun LiveTvScreen(vm: DesktopViewModel, state: AppState.Ready, onPlay: (LiveStrea
                     },
                     color = TextHi, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.weight(1f))
+                // Programm-Raster (Parität zur iOS-EpgGrid)
+                Surface(
+                    shape = RoundedCornerShape(8.dp), color = Card,
+                    modifier = Modifier.clickable { zeigeEpg = true }
+                ) {
+                    Text(
+                        I18n.s("📺 Programm"), color = Accent, fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Text(I18n.sf("{0} Kanäle", applied.size), color = TextMid, fontSize = 13.sp)
                 Spacer(Modifier.width(12.dp))
                 // Sortier-Button (Zyklus: Nummer → A–Z → Manuell)
@@ -704,6 +733,37 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                     Spacer(Modifier.height(8.dp))
                 }
 
+                // Weiterführende Quellen (Parität zur iOS-App): IMDb direkt über
+                // die TMDB-Kennung, Filmstarts über die Suche. Bewusst Links
+                // statt Scraping — filmstarts.de sperrt /suchen/ per robots.txt.
+                val imdbKennung = meta?.imdbId
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (imdbKennung != null) {
+                        Surface(
+                            shape = RoundedCornerShape(7.dp), color = Card,
+                            modifier = Modifier.clickable {
+                                oeffneImBrowser("https://www.imdb.com/title/$imdbKennung/")
+                            }
+                        ) {
+                            Text(I18n.s("IMDb öffnen"), color = Accent, fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(7.dp), color = Card,
+                        modifier = Modifier.clickable {
+                            oeffneImBrowser(
+                                "https://www.filmstarts.de/suchen/?q=" +
+                                    java.net.URLEncoder.encode(m.name, "UTF-8")
+                            )
+                        }
+                    ) {
+                        Text(I18n.s("Auf Filmstarts suchen"), color = TextMid, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+
                 // Beschreibung (TMDB overview oder Fallback)
                 if (metaLoading) {
                     Text(I18n.s("Beschreibung lädt…"), color = TextMid, fontSize = 13.sp)
@@ -990,9 +1050,50 @@ fun SeriesDetailScreen(
                     LazyColumn(Modifier.weight(1f).padding(end = 20.dp, top = 20.dp, bottom = 20.dp)) {
                         seasons.forEach { season ->
                             item {
-                                Text(season.name ?: "Staffel ${season.seasonNumber ?: ""}",
-                                    color = Accent, fontSize = 17.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(vertical = 10.dp))
+                                Row(
+                                    Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(season.name ?: "Staffel ${season.seasonNumber ?: ""}",
+                                        color = Accent, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                    Spacer(Modifier.weight(1f))
+                                    // Ganze Staffel laden (Parität zur iOS-App): nimmt
+                                    // alle Folgen, die noch nicht laufen oder fertig sind.
+                                    val folgen = season.episodes.orEmpty()
+                                    val offen = folgen.count { ep ->
+                                        val s = VodDownloader.items.firstOrNull { it.id == "series:${ep.id}" }
+                                        s == null || s.status == "failed"
+                                    }
+                                    if (offen > 0) {
+                                        Surface(
+                                            shape = RoundedCornerShape(7.dp), color = Card,
+                                            modifier = Modifier.clickable {
+                                                val c = vm.creds ?: return@clickable
+                                                folgen.forEach { ep ->
+                                                    val dlId = "series:${ep.id}"
+                                                    val s = VodDownloader.items.firstOrNull { it.id == dlId }
+                                                    if (s == null || s.status == "failed") {
+                                                        val url = c.seriesUrl(ep.id, ep.containerExtension ?: "mp4")
+                                                        if (url != null) {
+                                                            VodDownloader.start(
+                                                                dlId,
+                                                                ep.title ?: "Episode ${ep.episodeNum}",
+                                                                url,
+                                                                ep.containerExtension ?: "mp4"
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        ) {
+                                            Text(
+                                                I18n.sf("⬇ Staffel laden ({0})", offen),
+                                                color = Accent, fontSize = 12.sp,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
                             items(season.episodes.orEmpty(), key = { it.id }) { ep ->
                                 val all = seasons.flatMap { it.episodes.orEmpty() }
@@ -1119,7 +1220,26 @@ fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String)
     val complete = VodDownloader.items.filter { it.status == "complete" }
 
     Column(Modifier.fillMaxSize().background(Bg).padding(20.dp)) {
-        Text(I18n.s("Offline-Downloads"), color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(I18n.s("Offline-Downloads"), color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.weight(1f))
+            // Fehlgeschlagene Einträge sammeln sich sonst im Index an (iOS build37)
+            val kaputt = VodDownloader.items.filter { it.status == "failed" }
+            if (kaputt.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(7.dp), color = Card,
+                    modifier = Modifier.clickable {
+                        kaputt.forEach { VodDownloader.delete(it.id) }
+                    }
+                ) {
+                    Text(
+                        I18n.sf("Fehlgeschlagene löschen ({0})", kaputt.size),
+                        color = Danger, fontSize = 12.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
         Spacer(Modifier.height(10.dp))
 
         // Speicheranzeige (Parität zur iOS-App): frei, belegt, Download-Anteil
@@ -1172,5 +1292,15 @@ fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String)
                 TextButton(onClick = { deleteConfirmFor = null }) { Text(I18n.s("Abbrechen"), color = TextMid) }
             }
         )
+    }
+}
+
+
+/** Öffnet eine Adresse im Standardbrowser — für IMDb/Filmstarts-Links. */
+fun oeffneImBrowser(url: String) {
+    runCatching {
+        if (java.awt.Desktop.isDesktopSupported()) {
+            java.awt.Desktop.getDesktop().browse(java.net.URI(url))
+        }
     }
 }

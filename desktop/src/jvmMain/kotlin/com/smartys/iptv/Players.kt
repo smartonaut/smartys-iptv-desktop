@@ -780,6 +780,24 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
     var positionMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
     var watcher by remember { mutableStateOf<CreditsWatcher?>(null) }
+    // Abspann erkannt: erst ankündigen, dann nach 5 s weiterspringen.
+    // "B" bricht ab und lässt die Folge auslaufen (Parität zur iOS-App).
+    var abspannLaeuft by remember { mutableStateOf(false) }
+
+    // Abspann erkannt -> Hinweis einblenden und 5 s warten. Läuft die Folge
+    // vorher aus, greift onVodEnded (advance) ohnehin.
+    LaunchedEffect(abspannLaeuft) {
+        if (!abspannLaeuft) return@LaunchedEffect
+        player.showOsd(
+            "\u23ED " + I18n.s("Abspann erkannt — nächste Folge in 5 s") + "  (B = " + I18n.s("bleiben") + ")",
+            5000, position = MarqueePosition.TOP
+        )
+        kotlinx.coroutines.delay(5000)
+        abspannLaeuft = false
+        vm.markWatched(vp.streamId)
+        vp.next?.invoke()
+    }
+
     var volume by remember { mutableStateOf(100) }
     var brightness by remember { mutableStateOf(1.0f) }
     var tonspuren by remember { mutableStateOf<List<VodPlayerApi.Spur>>(emptyList()) }
@@ -919,7 +937,7 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
                                 }
                                 player.onVodEnded = { advance() }
                                 if (vp.next != null) {
-                                    val w = CreditsWatcher(player) { advance() }
+                                    val w = CreditsWatcher(player) { abspannLaeuft = true }
                                     watcher = w
                                     scope.launch { w.run() }
                                 }
