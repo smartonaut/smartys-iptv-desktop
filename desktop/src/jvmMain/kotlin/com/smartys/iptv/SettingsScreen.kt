@@ -68,27 +68,41 @@ fun SettingsScreen(vm: DesktopViewModel) {
         Text(I18n.s("Einstellungen"), color = TextHi, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(20.dp))
 
-        // ---- Sprache (offene Liste: Deutsch, English, Polski, Türkçe, فارسی, اردو) ----
+        // ---- Sprache (Dropdown — bei vielen Sprachen sonst unübersichtlich) ----
         Text(I18n.s("Sprache"), color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-        androidx.compose.foundation.layout.FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            I18n.alle.forEach { sp ->
-                val aktiv = I18n.sprache.code == sp.code
-                Text(
-                    sp.label,
-                    color = if (aktiv) AccentDark else TextHi,
-                    fontSize = 13.sp,
-                    fontWeight = if (aktiv) FontWeight.Bold else FontWeight.Normal,
-                    modifier = Modifier
-                        .clip(androidx.compose.foundation.shape.RoundedCornerShape(7.dp))
-                        .background(if (aktiv) Accent else Card)
-                        .clickable { I18n.setze(sp) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                )
+        var sprachMenu by remember { mutableStateOf(false) }
+        Box {
+            Row(
+                modifier = Modifier
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
+                    .background(Card)
+                    .clickable { sprachMenu = true }
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(I18n.sprache.label, color = TextHi, fontSize = 14.sp)
+                Spacer(Modifier.width(12.dp))
+                Text("▾", color = Accent, fontSize = 14.sp)
+            }
+            DropdownMenu(expanded = sprachMenu, onDismissRequest = { sprachMenu = false }) {
+                I18n.alle.forEach { sp ->
+                    val aktiv = I18n.sprache.code == sp.code
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                if (aktiv) "${sp.label}  ✓" else sp.label,
+                                color = if (aktiv) Accent else TextHi,
+                                fontSize = 14.sp,
+                                fontWeight = if (aktiv) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        onClick = {
+                            I18n.setze(sp)
+                            sprachMenu = false
+                        }
+                    )
+                }
             }
         }
         Spacer(Modifier.height(20.dp))

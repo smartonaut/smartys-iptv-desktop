@@ -685,11 +685,17 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             Spacer(Modifier.weight(1f))
 
             // Erinnerung für die folgende Sendung (Parität zur iOS-Glocke)
-            val (_, naechste) = remember(ch.epgChannelId, erinnerungTick) {
-                XmltvEpg.getNowAndNext(ch.epgChannelId)
+            // EPG-Abfrage NICHT im Kompositions-Thread: das XMLTV-Parsing läuft
+            // sonst im AWT-Thread und blockiert die Oberfläche.
+            var naechste by remember { mutableStateOf<XmltvProgramme?>(null) }
+            LaunchedEffect(ch.epgChannelId, erinnerungTick) {
+                naechste = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    XmltvEpg.getNowAndNext(ch.epgChannelId).second
+                }
             }
-            if (naechste != null) {
-                val erId = "epg:${ch.epgChannelId}:${naechste.start}"
+            val folge = naechste
+            if (folge != null) {
+                val erId = "epg:${ch.epgChannelId}:${folge.start}"
                 val geplant = Erinnerungen.istGeplant(erId)
                 Text(
                     if (geplant) "🔔" else "🔕",
@@ -697,11 +703,11 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                     color = if (geplant) Accent else TextMid,
                     modifier = Modifier
                         .clickable {
-                            Erinnerungen.umschalten(erId, naechste.title, ch.name, naechste.start)
+                            Erinnerungen.umschalten(erId, folge.title, ch.name, folge.start)
                             erinnerungTick++
                             player.showOsd(
                                 if (Erinnerungen.istGeplant(erId))
-                                    "🔔 Erinnerung: ${naechste.title} (15 Min vorher)"
+                                    "🔔 Erinnerung: ${folge.title} (15 Min vorher)"
                                 else "Erinnerung gelöscht",
                                 4000, position = MarqueePosition.TOP
                             )

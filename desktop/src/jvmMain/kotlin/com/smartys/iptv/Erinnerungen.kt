@@ -134,21 +134,30 @@ object Erinnerungen {
         }
     }
 
-    /** System-Benachrichtigung über das TrayIcon (Linux/Windows gleichermaßen). */
+    /**
+     * System-Benachrichtigung. Bewusst OHNE java.awt.SystemTray: dessen
+     * Initialisierung blockiert auf GNOME-Sitzungen ohne StatusNotifier-Host
+     * den AWT-Thread — die App wirkte dann "aufgehängt". notify-send ist auf
+     * Linux immer vorhanden; Windows/macOS fallen auf das Tray zurück.
+     */
     private fun melden(titel: String, text: String) {
+        val linux = System.getProperty("os.name").lowercase().contains("linux")
+        if (linux) {
+            val ok = runCatching {
+                ProcessBuilder("notify-send", "-a", "Smartys IPTV", "-i", "video-x-generic", titel, text)
+                    .redirectErrorStream(true)
+                    .start()
+                    .waitFor(3, java.util.concurrent.TimeUnit.SECONDS)
+            }.getOrDefault(false)
+            if (ok) return
+        }
         runCatching {
             if (java.awt.SystemTray.isSupported()) {
-                val tray = TrayHolder.tray()
-                tray?.displayMessage(titel, text, java.awt.TrayIcon.MessageType.INFO)
+                TrayHolder.tray()?.displayMessage(titel, text, java.awt.TrayIcon.MessageType.INFO)
                 return
             }
         }
-        // Fallback: Desktop-Benachrichtigung über notify-send (Linux)
-        runCatching {
-            ProcessBuilder("notify-send", "-a", "Smartys IPTV", titel, text).start()
-        }.onFailure {
-            println("Erinnerung: $titel — $text")
-        }
+        println("Erinnerung: $titel — $text")
     }
 }
 
