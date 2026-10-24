@@ -415,6 +415,9 @@ class DesktopViewModel {
         channels.take(count).forEach { epgFor(it) }
     }
 
+    /** Öffentlich für das Programm-Raster: EPG erneut vom Provider holen. */
+    fun epgNachladen() = loadXmltvEpg()
+
     private fun loadXmltvEpg() {
         val c = creds ?: return
         scope.launch {
