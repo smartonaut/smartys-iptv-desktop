@@ -1,5 +1,7 @@
 package com.smartys.iptv
 
+import kotlin.concurrent.thread
+
 import com.sun.jna.Library
 import com.sun.jna.Native
 import com.sun.jna.NativeLibrary
@@ -350,10 +352,18 @@ class VlcPlayer : VodPlayerApi {
         // der native Player noch lebt — sonst feuert der Timer nach release().
         osdOverlayTimer?.stop()
         osdOverlayTimer = null
+        // Ab hier keine Spur-/Bild-Abfragen mehr: der native Player baut ab.
+        playerReleased = true
         runCatching { mediaPlayer?.logo()?.enable(false) }
-        mediaPlayer?.controls()?.stop()
-        playing = false
-        PlayerLog.done("stop")
+        // stop() NICHT im UI-Thread: libvlc wartet beim Teardown auf den
+        // Netzwerkabbau. Bei einem hängenden Stream blockierte das die gesamte
+        // Oberfläche — die App ließ sich dann nicht einmal mehr beenden.
+        val mp = mediaPlayer
+        thread(isDaemon = true, name = "vlc-stop") {
+            runCatching { mp?.controls()?.stop() }
+            playing = false
+            PlayerLog.done("stop")
+        }
     }
 
     override fun seekTo(posMs: Long) {
@@ -395,29 +405,39 @@ class VlcPlayer : VodPlayerApi {
 
     // ---------- Tonspur, Untertitel, Bildanpassung (Parität zur iOS-App) ----------
 
-    override fun tonspuren(): List<VodPlayerApi.Spur> = runCatching {
-        mediaPlayer?.audio()?.trackDescriptions()
+    /**
+     * Alle fünf Zugriffe prüfen [playerReleased]: nach stop()/release() baut
+     * libVLC ab, ein Zugriff auf audio()/subpictures()/video() stürzt dann im
+     * nativen Code ab (SIGSEGV in libc, kein Java-Stacktrace).
+     */
+    private inline fun <T> amPlayer(fallback: T, block: (uk.co.caprica.vlcj.player.base.MediaPlayer) -> T): T {
+        if (playerReleased) return fallback
+        val mp = mediaPlayer ?: return fallback
+        return runCatching { block(mp) }.getOrDefault(fallback)
+    }
+
+    override fun tonspuren(): List<VodPlayerApi.Spur> = amPlayer(emptyList()) { mp ->
+        mp.audio().trackDescriptions()
             ?.map { VodPlayerApi.Spur(it.id(), it.description() ?: "Spur ${it.id()}") }
             ?: emptyList()
-    }.getOrDefault(emptyList())
+    }
 
-    override fun untertitelspuren(): List<VodPlayerApi.Spur> = runCatching {
-        mediaPlayer?.subpictures()?.trackDescriptions()
+    override fun untertitelspuren(): List<VodPlayerApi.Spur> = amPlayer(emptyList()) { mp ->
+        mp.subpictures().trackDescriptions()
             ?.map { VodPlayerApi.Spur(it.id(), it.description() ?: "Untertitel ${it.id()}") }
             ?: emptyList()
-    }.getOrDefault(emptyList())
+    }
 
     override fun waehleTonspur(id: Int) {
         PlayerLog.mark("VLC Tonspur $id")
-        runCatching { mediaPlayer?.audio()?.setTrack(id) }
+        amPlayer(Unit) { mp -> mp.audio().setTrack(id) }
     }
 
     override fun waehleUntertitel(id: Int) {
         PlayerLog.mark("VLC Untertitel $id")
-        runCatching {
-            val spu = mediaPlayer?.subpictures() ?: return
+        amPlayer(Unit) { mp ->
             // -1 schaltet Untertitel ab (vlcj kennt kein eigenes disable())
-            spu.setTrack(if (id < 0) -1 else id)
+            mp.subpictures().setTrack(if (id < 0) -1 else id)
         }
     }
 
@@ -426,9 +446,9 @@ class VlcPlayer : VodPlayerApi {
      * Ratio-Modi strecken das Bild auf das Verhältnis — wie in der iOS-App.
      */
     override fun setzeBildmodus(modus: VodPlayerApi.Bildmodus) {
-        val video = mediaPlayer?.video() ?: return
         PlayerLog.mark("VLC Bildmodus $modus")
-        runCatching {
+        amPlayer(Unit) { mp ->
+            val video = mp.video()
             when (modus) {
                 VodPlayerApi.Bildmodus.ORIGINAL -> {
                     video.setAspectRatio(null)
