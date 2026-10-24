@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -404,6 +406,8 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     // Bis dahin läuft der Canvas unsichtbar (1px) und der Compose-
     // Lade-Indikator bleibt stehen.
     var videoReady by remember { mutableStateOf(false) }
+    // Zähler, der nach dem Setzen/Löschen einer Erinnerung neu zeichnen lässt
+    var erinnerungTick by remember { mutableStateOf(0) }
     // OSD-Karte (Java2D, selbstgezeichnet): Senderlogo + Sender/Kategorie +
     // EPG-Slot + echter Fortschrittsbalken + "Danach"-Zeile. Kein VLC-Filter
     // (unter VLC 3 unzuverlaessig), daher plattformunabhaengig identisch.
@@ -679,6 +683,33 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
             Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
             Text(ch.name, color = TextHi, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
+
+            // Erinnerung für die folgende Sendung (Parität zur iOS-Glocke)
+            val (_, naechste) = remember(ch.epgChannelId, erinnerungTick) {
+                XmltvEpg.getNowAndNext(ch.epgChannelId)
+            }
+            if (naechste != null) {
+                val erId = "epg:${ch.epgChannelId}:${naechste.start}"
+                val geplant = Erinnerungen.istGeplant(erId)
+                Text(
+                    if (geplant) "🔔" else "🔕",
+                    fontSize = 16.sp,
+                    color = if (geplant) Accent else TextMid,
+                    modifier = Modifier
+                        .clickable {
+                            Erinnerungen.umschalten(erId, naechste.title, ch.name, naechste.start)
+                            erinnerungTick++
+                            player.showOsd(
+                                if (Erinnerungen.istGeplant(erId))
+                                    "🔔 Erinnerung: ${naechste.title} (15 Min vorher)"
+                                else "Erinnerung gelöscht",
+                                4000, position = MarqueePosition.TOP
+                            )
+                        }
+                        .padding(horizontal = 8.dp)
+                )
+            }
+
             Text(if (paused) "▶" else "❚❚", color = TextHi, fontSize = 18.sp,
                 modifier = Modifier.clickable {
                     doTogglePause()
@@ -745,6 +776,14 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
     var watcher by remember { mutableStateOf<CreditsWatcher?>(null) }
     var volume by remember { mutableStateOf(100) }
     var brightness by remember { mutableStateOf(1.0f) }
+    var tonspuren by remember { mutableStateOf<List<VodPlayerApi.Spur>>(emptyList()) }
+    var untertitelspuren by remember { mutableStateOf<List<VodPlayerApi.Spur>>(emptyList()) }
+    var tonMenu by remember { mutableStateOf(false) }
+    var ccMenu by remember { mutableStateOf(false) }
+    var bildMenu by remember { mutableStateOf(false) }
+    var aktiverTon by remember { mutableStateOf<Int?>(null) }
+    var aktiverCc by remember { mutableStateOf<Int?>(null) }
+    var bildmodus by remember { mutableStateOf(VodPlayerApi.Bildmodus.ORIGINAL) }
     val scope = rememberCoroutineScope()
 
     // Startposition: forceStartPos (0 = von vorne) hat Vorrang vor Auto-Resume
@@ -790,6 +829,21 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
 
     // OSD einmal beim Start (Titel + Restlaufzeit), sobald das Bild steht
     LaunchedEffect(videoReady) { if (videoReady) showVodOsd() }
+
+    // Spuren erst holen, wenn der Demuxer sie kennt (VLC braucht einen Moment).
+    // Bei MKV kommen Ton- und Untertitelspuren erst mit dem ersten Keyframe.
+    LaunchedEffect(videoReady) {
+        if (videoReady) {
+            repeat(4) {
+                delay(700)
+                val t = player.tonspuren()
+                val u = player.untertitelspuren()
+                if (t.isNotEmpty()) tonspuren = t
+                if (u.isNotEmpty()) untertitelspuren = u
+                if (t.isNotEmpty() || u.isNotEmpty()) return@LaunchedEffect
+            }
+        }
+    }
 
     VolumeArrows(
         onUp = { volume = (volume + 10).coerceAtMost(100); player.setVolume(volume) },
@@ -899,6 +953,82 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             Text("←", color = Accent, fontSize = 22.sp, modifier = Modifier.clickable(onClick = onBack).padding(end = 14.dp))
             Text(vp.title, color = TextHi, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.weight(1f))
+
+            // Tonspur (nur wenn die Datei mehrere mitbringt)
+            if (tonspuren.size > 1) {
+                Box {
+                    Text(
+                        "🎧", fontSize = 16.sp,
+                        color = if (aktiverTon != null) Accent else TextHi,
+                        modifier = Modifier.clickable { tonMenu = true }.padding(horizontal = 8.dp)
+                    )
+                    DropdownMenu(expanded = tonMenu, onDismissRequest = { tonMenu = false }) {
+                        tonspuren.forEach { s ->
+                            DropdownMenuItem(
+                                text = { Text(s.name, fontSize = 13.sp) },
+                                onClick = {
+                                    player.waehleTonspur(s.id)
+                                    aktiverTon = s.id
+                                    tonMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Untertitel
+            if (untertitelspuren.isNotEmpty()) {
+                Box {
+                    Text(
+                        "CC", fontSize = 13.sp, fontWeight = FontWeight.Bold,
+                        color = if (aktiverCc != null) Accent else TextHi,
+                        modifier = Modifier.clickable { ccMenu = true }.padding(horizontal = 8.dp)
+                    )
+                    DropdownMenu(expanded = ccMenu, onDismissRequest = { ccMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Aus", fontSize = 13.sp) },
+                            onClick = {
+                                player.waehleUntertitel(-1)
+                                aktiverCc = null
+                                ccMenu = false
+                            }
+                        )
+                        untertitelspuren.forEach { s ->
+                            DropdownMenuItem(
+                                text = { Text(s.name, fontSize = 13.sp) },
+                                onClick = {
+                                    player.waehleUntertitel(s.id)
+                                    aktiverCc = s.id
+                                    ccMenu = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Bildanpassung
+            Box {
+                Text(
+                    "▭", fontSize = 16.sp,
+                    color = if (bildmodus != VodPlayerApi.Bildmodus.ORIGINAL) Accent else TextHi,
+                    modifier = Modifier.clickable { bildMenu = true }.padding(horizontal = 8.dp)
+                )
+                DropdownMenu(expanded = bildMenu, onDismissRequest = { bildMenu = false }) {
+                    VodPlayerApi.Bildmodus.values().forEach { m ->
+                        DropdownMenuItem(
+                            text = { Text(bildmodusName(m), fontSize = 13.sp) },
+                            onClick = {
+                                player.setzeBildmodus(m)
+                                bildmodus = m
+                                bildMenu = false
+                            }
+                        )
+                    }
+                }
+            }
+
             Text(if (paused) "▶" else "❚❚", color = TextHi, fontSize = 18.sp,
                 modifier = Modifier.clickable {
                     paused = !paused
@@ -950,6 +1080,13 @@ fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight()
         )
     }
+}
+
+private fun bildmodusName(m: VodPlayerApi.Bildmodus): String = when (m) {
+    VodPlayerApi.Bildmodus.ORIGINAL -> "Original"
+    VodPlayerApi.Bildmodus.FUELLEN -> "Füllen (zuschneiden)"
+    VodPlayerApi.Bildmodus.RATIO_16_9 -> "16:9 erzwingen"
+    VodPlayerApi.Bildmodus.RATIO_4_3 -> "4:3 erzwingen"
 }
 
 private fun fmt(ms: Long): String {

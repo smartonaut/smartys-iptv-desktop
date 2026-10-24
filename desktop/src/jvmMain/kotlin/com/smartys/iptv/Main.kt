@@ -423,6 +423,8 @@ fun main(args: Array<String>) {
     }
     application {
         extractReadme()
+        // Sendungserinnerungen: lädt gespeicherte und startet den Prüf-Timer
+        runCatching { Erinnerungen.start() }
         val icon = loadWindowIcon()
         Window(onCloseRequest = ::exitApplication, title = "Smartys IPTV", icon = icon) {
             FullscreenController.window = this.window

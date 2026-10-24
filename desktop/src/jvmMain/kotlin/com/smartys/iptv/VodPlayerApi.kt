@@ -20,6 +20,12 @@ interface VodPlayerApi {
     /** Wird beim natürlichen Ende eines VOD-Titels aufgerufen. */
     var onVodEnded: (() -> Unit)?
 
+    /** Eine wählbare Tonspur oder Untertitelspur. */
+    data class Spur(val id: Int, val name: String)
+
+    /** Bildanpassung, wie in der iOS-App. */
+    enum class Bildmodus { ORIGINAL, FUELLEN, RATIO_16_9, RATIO_4_3 }
+
     fun init(): Boolean
     fun play(url: String, isVod: Boolean = false, timeshift: Boolean = false, timeshiftDir: String? = null, startPosMs: Long = 0)
     fun pause()
@@ -33,6 +39,18 @@ interface VodPlayerApi {
     fun setMuted(muted: Boolean)
     fun setBrightness(b: Float)
     fun snapshot(): BufferedImage?
+
+    /** Verfügbare Tonspuren (leer, wenn die Datei nur eine hat). */
+    fun tonspuren(): List<Spur> = emptyList()
+
+    /** Verfügbare Untertitelspuren (eingebettet). */
+    fun untertitelspuren(): List<Spur> = emptyList()
+
+    fun waehleTonspur(id: Int) {}
+    fun waehleUntertitel(id: Int) {}
+
+    /** Bildanpassung setzen (Zuschneiden/Strecken). */
+    fun setzeBildmodus(modus: Bildmodus) {}
 
     /** Text-OSD direkt ins Videobild (VLC-Marquee / mpv show-text). */
     fun showOsd(

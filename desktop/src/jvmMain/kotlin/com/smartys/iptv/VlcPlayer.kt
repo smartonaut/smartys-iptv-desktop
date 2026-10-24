@@ -393,6 +393,63 @@ class VlcPlayer : VodPlayerApi {
     fun brightness(): Float =
         mediaPlayer?.video()?.brightness() ?: 1.0f
 
+    // ---------- Tonspur, Untertitel, Bildanpassung (Parität zur iOS-App) ----------
+
+    override fun tonspuren(): List<VodPlayerApi.Spur> = runCatching {
+        mediaPlayer?.audio()?.trackDescriptions()
+            ?.map { VodPlayerApi.Spur(it.id(), it.description() ?: "Spur ${it.id()}") }
+            ?: emptyList()
+    }.getOrDefault(emptyList())
+
+    override fun untertitelspuren(): List<VodPlayerApi.Spur> = runCatching {
+        mediaPlayer?.subpictures()?.trackDescriptions()
+            ?.map { VodPlayerApi.Spur(it.id(), it.description() ?: "Untertitel ${it.id()}") }
+            ?: emptyList()
+    }.getOrDefault(emptyList())
+
+    override fun waehleTonspur(id: Int) {
+        PlayerLog.mark("VLC Tonspur $id")
+        runCatching { mediaPlayer?.audio()?.setTrack(id) }
+    }
+
+    override fun waehleUntertitel(id: Int) {
+        PlayerLog.mark("VLC Untertitel $id")
+        runCatching {
+            val spu = mediaPlayer?.subpictures() ?: return
+            // -1 schaltet Untertitel ab (vlcj kennt kein eigenes disable())
+            spu.setTrack(if (id < 0) -1 else id)
+        }
+    }
+
+    /**
+     * Bildanpassung. "Füllen" schneidet auf 16:9 zu (Crop), die beiden
+     * Ratio-Modi strecken das Bild auf das Verhältnis — wie in der iOS-App.
+     */
+    override fun setzeBildmodus(modus: VodPlayerApi.Bildmodus) {
+        val video = mediaPlayer?.video() ?: return
+        PlayerLog.mark("VLC Bildmodus $modus")
+        runCatching {
+            when (modus) {
+                VodPlayerApi.Bildmodus.ORIGINAL -> {
+                    video.setAspectRatio(null)
+                    video.setCropGeometry(null)
+                }
+                VodPlayerApi.Bildmodus.FUELLEN -> {
+                    video.setAspectRatio(null)
+                    video.setCropGeometry("16:9")
+                }
+                VodPlayerApi.Bildmodus.RATIO_16_9 -> {
+                    video.setCropGeometry(null)
+                    video.setAspectRatio("16:9")
+                }
+                VodPlayerApi.Bildmodus.RATIO_4_3 -> {
+                    video.setCropGeometry(null)
+                    video.setAspectRatio("4:3")
+                }
+            }
+        }
+    }
+
     /**
      * OSD-Karte im Android-Stil: dunkle Karte unten links mit Senderlogo,
      * Titel, EPG-Zeile, Fortschrittsbalken und optionaler "Danach"-Zeile.

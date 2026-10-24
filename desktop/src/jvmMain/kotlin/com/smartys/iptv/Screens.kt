@@ -616,10 +616,26 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
 
 // ---------- Film-Detail (Beschreibung + Resume/von-vorne + Trailer) ----------
 
+/** Kleine Plakette für eine Bewertungsquelle (IMDb / Rotten Tomatoes / Metacritic). */
+@Composable
+private fun RatingChip(quelle: String, wert: String, farbe: Color) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        modifier = Modifier
+            .background(farbe.copy(alpha = 0.14f), androidx.compose.foundation.shape.RoundedCornerShape(6.dp))
+            .padding(horizontal = 9.dp, vertical = 3.dp)
+    ) {
+        Text(quelle, color = farbe, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Text(wert, color = TextHi, fontSize = 12.sp)
+    }
+}
+
 @Composable
 fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, onPlay: (Long?) -> Unit) {
     var meta by remember { mutableStateOf<TmdbMeta.MovieMeta?>(null) }
     var metaLoading by remember { mutableStateOf(m.tmdb != null) }
+    var ratings by remember { mutableStateOf<TmdbMeta.Ratings?>(null) }
 
     LaunchedEffect(m.tmdb) {
         if (m.tmdb != null) {
@@ -628,6 +644,11 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                 metaLoading = false
             }
         }
+    }
+
+    // Zusatznoten brauchen die IMDb-Kennung aus den TMDB-Daten
+    LaunchedEffect(meta?.imdbId) {
+        ratings = withContext(Dispatchers.IO) { TmdbMeta.fetchRatings(meta?.imdbId) }
     }
 
     // Resume-Position (für den "Fortsetzen"-Button)
@@ -653,6 +674,32 @@ fun MovieDetailScreen(vm: DesktopViewModel, m: VodStream, onBack: () -> Unit, on
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         m.rating?.let { Text("★ $it", color = Accent, fontSize = 14.sp) }
                         m.categoryName.takeIf { it.isNotBlank() }?.let { Text(it, color = TextMid, fontSize = 13.sp) }
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                // Bewertungen: TMDB-Note plus OMDb-Plaketten (IMDb / RT / MC)
+                val tmdbNote = meta?.voteAverage
+                if (tmdbNote != null) {
+                    val stimmen = meta?.voteCount
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("★", color = Accent, fontSize = 15.sp)
+                        Text(
+                            String.format(java.util.Locale.GERMAN, "%.1f", tmdbNote).replace('.', ','),
+                            color = TextHi, fontSize = 15.sp, fontWeight = FontWeight.Bold
+                        )
+                        Text("/ 10", color = TextMid, fontSize = 12.sp)
+                        if (stimmen != null && stimmen > 0) {
+                            Text("· ${String.format("%,d", stimmen)} Stimmen", color = TextMid, fontSize = 12.sp)
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+                ratings?.takeIf { it.hatWerte }?.let { r ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        r.imdb?.let { RatingChip("IMDb", it, Accent) }
+                        r.rottenTomatoes?.let { RatingChip("RT", it, Danger) }
+                        r.metacritic?.let { RatingChip("MC", it, Color(0xFF4ECDC4)) }
                     }
                     Spacer(Modifier.height(8.dp))
                 }
@@ -1000,6 +1047,70 @@ private fun EpisodeRow(vm: DesktopViewModel, show: SeriesStream, ep: SeriesEpiso
 
 // ---------- Downloads-Tab ----------
 
+/** Größe menschenlesbar (GB/MB). */
+private fun fmtGroesse(bytes: Long): String = when {
+    bytes >= 1_000_000_000L -> String.format(java.util.Locale.GERMAN, "%.1f GB", bytes / 1_000_000_000.0)
+    bytes >= 1_000_000L -> String.format(java.util.Locale.GERMAN, "%.0f MB", bytes / 1_000_000.0)
+    else -> "${bytes / 1000} KB"
+}
+
+/**
+ * Speicheranzeige über den Downloads: frei, gesamt, davon belegt und der
+ * Anteil der Downloads. Parität zur iOS-App (dort mit 3-GB-Warnung, hier
+ * mit 5 GB, weil Desktop-Platten mehr Luft haben).
+ */
+@Composable
+private fun SpeicherZeile() {
+    var frei by remember { mutableStateOf(0L) }
+    var gesamt by remember { mutableStateOf(0L) }
+    var downloadsBelegt by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(VodDownloader.items.size) {
+        withContext(Dispatchers.IO) {
+            val ordner = VodDownloader.downloadsDir()
+            frei = ordner.usableSpace
+            gesamt = ordner.totalSpace
+            downloadsBelegt = VodDownloader.items.sumOf { it.downloadedBytes }
+        }
+    }
+
+    if (gesamt <= 0) return
+
+    val belegt = gesamt - frei
+    val anteil = (belegt.toFloat() / gesamt.toFloat()).coerceIn(0f, 1f)
+    val knapp = frei < 5_000_000_000L
+
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).background(Card).padding(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Speicher", color = TextHi, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.weight(1f))
+            Text(
+                "${fmtGroesse(frei)} frei von ${fmtGroesse(gesamt)}",
+                color = if (knapp) Danger else TextMid, fontSize = 12.sp
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        // Belegungsbalken
+        Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(Color(0x33FFFFFF))) {
+            Box(
+                Modifier.fillMaxWidth(anteil).fillMaxHeight()
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(if (knapp) Danger else Accent)
+            )
+        }
+        Spacer(Modifier.height(6.dp))
+        Row {
+            Text("Belegt: ${fmtGroesse(belegt)}", color = TextMid, fontSize = 11.sp)
+            Spacer(Modifier.width(16.dp))
+            Text("davon Downloads: ${fmtGroesse(downloadsBelegt)}", color = TextMid, fontSize = 11.sp)
+        }
+        if (knapp) {
+            Spacer(Modifier.height(6.dp))
+            Text("Wenig Platz — alte Downloads löschen.", color = Danger, fontSize = 11.sp)
+        }
+    }
+}
+
 @Composable
 fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String) -> Unit) {
     LaunchedEffect(Unit) { VodDownloader.load() }
@@ -1009,6 +1120,10 @@ fun DownloadsScreen(vm: DesktopViewModel, onPlay: (java.io.File, String, String)
 
     Column(Modifier.fillMaxSize().background(Bg).padding(20.dp)) {
         Text("Offline-Downloads", color = TextHi, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+
+        // Speicheranzeige (Parität zur iOS-App): frei, belegt, Download-Anteil
+        SpeicherZeile()
         Spacer(Modifier.height(14.dp))
 
         if (complete.isEmpty()) {
