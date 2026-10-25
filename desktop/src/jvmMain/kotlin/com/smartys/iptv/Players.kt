@@ -478,7 +478,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     /*
      * Watchdog gegen eingefrorenes Live-Bild.
      *
-     * Läuft die Wiedergabeposition 12 Sekunden nicht weiter, kommen keine Daten
+     * Läuft die Wiedergabeposition 5 Sekunden nicht weiter, kommen keine Daten
      * mehr — typisch bei Panel-Neustart, WLAN-Aussetzer oder wenn der Anbieter
      * die Session kappt. Dann wird der Kanal neu geöffnet (max. drei Versuche,
      * danach bleibt der Hinweis stehen). Pausiert der Nutzer, greift er nicht.
@@ -492,7 +492,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         var stillMs = 0L
         var versuche = 0
         while (true) {
-            kotlinx.coroutines.delay(2000)
+            kotlinx.coroutines.delay(1000)
             if (paused) {
                 letztePos = -1L; stillMs = 0L
                 continue
@@ -510,8 +510,8 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 versuche = 0
                 reconnects = 0
             } else {
-                stillMs += 2000L
-                if (stillMs >= 12_000L) {
+                stillMs += 1000L
+                if (stillMs >= 5_000L) {
                     stillMs = 0L
                     if (versuche < 3) {
                         versuche++
