@@ -469,10 +469,74 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         onDispose { }
     }
     var paused by remember { mutableStateOf(false) }
+
     var volume by remember { mutableStateOf(100) }
     var brightness by remember { mutableStateOf(1.0f) }
     val timeshift = remember { AppSettings.timeshiftEnabled() }
     val timeshiftDir = remember { AppSettings.timeshiftDir() }
+
+    /*
+     * Watchdog gegen eingefrorenes Live-Bild.
+     *
+     * Läuft die Wiedergabeposition 12 Sekunden nicht weiter, kommen keine Daten
+     * mehr — typisch bei Panel-Neustart, WLAN-Aussetzer oder wenn der Anbieter
+     * die Session kappt. Dann wird der Kanal neu geöffnet (max. drei Versuche,
+     * danach bleibt der Hinweis stehen). Pausiert der Nutzer, greift er nicht.
+     */
+    var reconnects by remember { mutableStateOf(0) }
+    LaunchedEffect(inited, paused) {
+        if (!inited) return@LaunchedEffect
+        // Anlaufphase: Pufferaufbau und Verbindungsaufbau sind kein Stillstand.
+        kotlinx.coroutines.delay(15_000)
+        var letztePos = -1L
+        var stillMs = 0L
+        var versuche = 0
+        while (true) {
+            kotlinx.coroutines.delay(2000)
+            if (paused) {
+                letztePos = -1L; stillMs = 0L
+                continue
+            }
+            val pos = player.currentPositionMs()
+            if (pos <= 0L) {
+                // Manche Live-Streams liefern gar keinen Zeitstempel. Dann ist
+                // die Position als Indikator wertlos — lieber nichts tun, als
+                // einen gesunden Kanal im Zwei-Sekunden-Takt neu zu starten.
+                continue
+            }
+            if (pos != letztePos) {
+                letztePos = pos
+                stillMs = 0L
+                versuche = 0
+                reconnects = 0
+            } else {
+                stillMs += 2000L
+                if (stillMs >= 12_000L) {
+                    stillMs = 0L
+                    if (versuche < 3) {
+                        versuche++
+                        reconnects = versuche
+                        player.showOsd(
+                            "🔄 " + I18n.s("Keine Daten — verbinde neu") + " ($versuche/3)",
+                            3000, MarqueePosition.BOTTOM, java.awt.Color.WHITE
+                        )
+                        player.play(
+                            url, isVod = false, timeshift = timeshift,
+                            timeshiftDir = timeshiftDir, startPosMs = 0
+                        )
+                        letztePos = -1L
+                    } else {
+                        player.showOsd(
+                            "⚠ " + I18n.s("Stream antwortet nicht — Zurück und Kanal neu wählen"),
+                            5000, MarqueePosition.BOTTOM, java.awt.Color.WHITE
+                        )
+                        break
+                    }
+                }
+            }
+        }
+    }
+
 
     // ---- Ad-hoc-Aufnahme (R startet, S stoppt) ----
     val recEngine = remember { RecordingEngine() }
