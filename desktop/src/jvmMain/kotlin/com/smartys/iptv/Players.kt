@@ -478,7 +478,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
     /*
      * Watchdog gegen eingefrorenes Live-Bild.
      *
-     * Läuft die Wiedergabeposition 5 Sekunden nicht weiter, kommen keine Daten
+     * Läuft die Wiedergabeposition 3 Sekunden nicht weiter, kommen keine Daten
      * mehr — typisch bei Panel-Neustart, WLAN-Aussetzer oder wenn der Anbieter
      * die Session kappt. Dann wird der Kanal neu geöffnet (max. drei Versuche,
      * danach bleibt der Hinweis stehen). Pausiert der Nutzer, greift er nicht.
@@ -511,7 +511,7 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 reconnects = 0
             } else {
                 stillMs += 1000L
-                if (stillMs >= 5_000L) {
+                if (stillMs >= 3_000L) {
                     stillMs = 0L
                     if (versuche < 3) {
                         versuche++
