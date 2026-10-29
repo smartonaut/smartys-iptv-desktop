@@ -45,14 +45,15 @@ fun derivePlayerId(seed: String): String {
 
 /**
  * Stabile Merkmale dieser Maschine als Seed, feste Reihenfolge:
- * `machine_id=<wert>|os=<wert>|nic=<wert>`.
+ * `machine_id=<wert>|os=<wert>|nic:<ifName>=<mac>|...`.
  *
  *  - machine_id: /etc/machine-id (Linux), IOPlatformUUID (macOS,
  *                MachineGuid via Registry (Windows)
  *  - os:         os.name, normalisiert auf linux/mac/windows
- *  - nic:        MAC der primaeren NIC — erste nicht-Loopback-Schnittstelle
- *                mit Hardware-Adresse, deterministisch nach ifName sortiert
- *                (nicht der Kernel-Enumerationsreihenfolge)
+ *  - nic:        ALLE physischen Netzwerk-Schnittstellen mit Hardware-Adresse,
+ *                je als `nic:<ifName>=<mac>`, sortiert nach ifName. Rechner
+ *                haben meist LAN und WLAN gleichzeitig — zaehlte nur eine,
+ *                kippte der Seed bei jedem Wechsel der aktiven Verbindung.
  *
  * Fehlt ein Merkmal (nicht lesbar, externer Befehl nicht verfuegbar, keine
  * NIC), faellt der Teil aus dem Seed WEG — nicht als leerer String anhaengen,
@@ -63,10 +64,10 @@ fun derivePlayerId(seed: String): String {
  * Weglassen des Merkmals, nie zum Absturz der App.
  */
 fun machineSeed(): String {
-    val parts = ArrayList<String>(3)
+    val parts = ArrayList<String>(4)
     machineId()?.let { parts.add("machine_id=$it") }
     osName()?.let { parts.add("os=$it") }
-    primaryNicMac()?.let { parts.add("nic=$it") }
+    parts.addAll(nicParts())
     return parts.joinToString("|")
 }
 
@@ -105,24 +106,52 @@ private fun osName(): String? {
 }
 
 /**
- * MAC der primaeren NIC in Kleinschrift mit Doppelpunkten
- * ("d0:27:24:00:8a:1e" — konsistent zum Enigma2-Testvektor). Sortiert nach
- * ifName (case-insensitiv, MAC-String als Tie-Breaker), damit der Seed auch
- * bei wechselnder Interface-Reihenfolge stabil bleibt.
+ * Alle Netzwerk-Hardware-Adressen als Seed-Teile, feste Reihenfolge:
+ * `nic:<ifName>=<mac>` je Schnittstelle, sortiert nach Name.
+ *
+ * Bewusst ALLE statt nur der ersten: Rechner haben meist LAN und WLAN
+ * gleichzeitig. Wuerde nur eine davon zaehlen, kippt der Seed, sobald das
+ * OS die andere nach vorne sortiert oder eine ausfaellt — obwohl die
+ * Maschine dieselbe ist. Die Menge beider ist stabil.
+ *
+ * Ausgeschlossen: Loopback, Null-/Broadcast-Adressen, virtuelle Netze
+ * (docker/veth/br-/tun/tap/virbr/vmnet/vboxnet) und — wo erkennbar — NICs
+ * am USB-Bus (Dock, Stick). Ein abgezogener USB-Adapter ist Zubehoer, kein
+ * Teil der Maschine. Gibt es keine eingebaute NIC, zaehlen ersatzweise alle.
  */
-private fun primaryNicMac(): String? = runCatching {
-    NetworkInterface.getNetworkInterfaces()?.asSequence()
+private fun nicParts(): List<String> = runCatching {
+    val all = NetworkInterface.getNetworkInterfaces()?.asSequence()
         ?.filterNotNull()
-        ?.filter { !it.isLoopback }
+        ?.filterNot { runCatching { it.isLoopback }.getOrDefault(true) }
         ?.mapNotNull { ni ->
-            val mac = runCatching { ni.hardwareAddress }.getOrNull()
-            if (mac == null || mac.isEmpty()) null
-            else ni.name to mac.joinToString(":") { String.format("%02x", it) }
+            val name = ni.name ?: return@mapNotNull null
+            if (VIRTUAL_NIC_PREFIXES.any { name.startsWith(it, ignoreCase = true) }) return@mapNotNull null
+            val mac = runCatching { ni.hardwareAddress }.getOrNull() ?: return@mapNotNull null
+            if (mac.isEmpty() || mac.all { it == 0.toByte() }) return@mapNotNull null
+            name to mac.joinToString(":") { String.format("%02x", it) }
         }
         ?.sortedWith(compareBy({ it.first.lowercase() }, { it.second }))
-        ?.firstOrNull()
-        ?.second
-}.getOrNull()
+        ?.toList()
+        ?: emptyList()
+    val builtin = all.filter { isBuiltinNic(it.first) }
+    (builtin.ifEmpty { all }).map { "nic:${it.first}=${it.second}" }
+}.getOrElse { emptyList() }
+
+private val VIRTUAL_NIC_PREFIXES = listOf(
+    "docker", "veth", "br-", "virbr", "tun", "tap", "vmnet", "vboxnet",
+    "utun", "awdl", "llw", "gif", "stf", "bridge",
+)
+
+/**
+ * Liegt die NIC auf einem festen Bus (PCIe/SoC) statt an USB? Auf Systemen
+ * ohne sysfs (Windows, macOS) ist das nicht pruefbar — dann gilt sie als
+ * eingebaut, damit die Ableitung dort nicht ohne Netz-Teil dasteht.
+ */
+private fun isBuiltinNic(name: String): Boolean = runCatching {
+    val dev = File("/sys/class/net/$name/device").canonicalPath
+    if (!dev.startsWith("/sys/")) return@runCatching true      // kein sysfs -> nicht beurteilbar
+    !dev.startsWith("/sys/devices/virtual") && !dev.contains("/usb")
+}.getOrDefault(true)
 
 /** Externen Befehl ausfuehren, Ausgabe mit 3-s-Timeout lesen; null bei jedem Fehler. */
 private fun commandOutput(command: List<String>): String? = runCatching {
