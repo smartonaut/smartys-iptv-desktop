@@ -43,6 +43,12 @@ kotlin {
                 implementation("com.google.zxing:core:3.5.3")
             }
         }
+        // JVM-Tests (z.B. Testvektor der Player-ID aus PLAYER-IDENTITY.md).
+        val jvmTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }
 
