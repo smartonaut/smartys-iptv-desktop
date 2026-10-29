@@ -9,6 +9,16 @@ unabhängig gebaut und versioniert — die Nummern dürfen auseinanderlaufen.
 
 ## Linux (deb/rpm)
 
+### 2.0.4 — 29.10.2026
+
+**Stabile Player-ID (PLAYER-IDENTITY.md v1).** Neue Installationen leiten die
+Player-ID deterministisch aus gerätestabilen Merkmalen ab
+(`machine_id|os|nic`, SHA-256) statt sie zu würfeln; eine bereits gespeicherte
+ID bleibt unangetastet. Zusätzlich liegt die Identität als Spiegel unter
+`~/.config/smartys-iptv/identity.json` und übersteht damit das Löschen des
+Profils. Hintergrund: die Panel-Line ist per AAD an die Player-ID gebunden —
+eine verlorene ID bedeutet Neu-Einrichtung beim Nutzer.
+
 ### 2.0.0 — 24.10.2026
 
 **36 Sprachen.** Alle europäischen Sprachen sowie Persisch und Urdu (beide
