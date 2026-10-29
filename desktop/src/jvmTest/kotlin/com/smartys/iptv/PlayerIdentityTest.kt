@@ -39,11 +39,30 @@ class PlayerIdentityTest {
     fun `machineSeed besteht nur aus key=value-Teilen oder ist komplett leer`() {
         val seed = machineSeed()
         if (seed.isEmpty()) return // keine Merkmale lesbar -> CredStore wuerfelt dann
+        // Teile: machine_id=..., os=..., nic:<ifName>=<mac>
         assertTrue(
-            Regex("^([a-z_]+=[^|]*)(\\|[a-z_]+=[^|]*)*$").matches(seed),
+            Regex("^([a-z0-9_]+(:[A-Za-z0-9_.\\-]+)?=[^|]*)(\\|[a-z0-9_]+(:[A-Za-z0-9_.\\-]+)?=[^|]*)*$").matches(seed),
             "seed=$seed"
         )
         // os.name ist eine Systemproperty und damit praktisch immer verfuegbar.
         assertTrue(seed.contains("os="), "seed=$seed")
+    }
+
+    /** Der Seed muss bei wiederholtem Aufruf identisch sein (sonst keine stabile ID). */
+    @Test
+    fun `machineSeed ist bei jedem Aufruf gleich`() {
+        assertEquals(machineSeed(), machineSeed())
+    }
+
+    /** Virtuelle Interfaces duerfen den Seed nicht verrauschen (docker, veth, ...). */
+    @Test
+    fun `machineSeed enthaelt keine virtuellen Interfaces`() {
+        val seed = machineSeed()
+        for (prefix in listOf("docker", "veth", "br-", "virbr", "tun", "tap", "vmnet", "vboxnet")) {
+            assertTrue(
+                !Regex("nic:${Regex.escape(prefix)}[^|]*=").containsMatchIn(seed),
+                "virtuelles Interface im Seed: $seed"
+            )
+        }
     }
 }

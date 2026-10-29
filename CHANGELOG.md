@@ -9,6 +9,15 @@ unabhängig gebaut und versioniert — die Nummern dürfen auseinanderlaufen.
 
 ## Linux (deb/rpm)
 
+### 2.0.5 — 29.10.2026
+
+**Alle Netzwerk-Schnittstellen im Seed.** Rechner haben meist LAN und WLAN
+gleichzeitig; bisher zählte nur die erste. Jetzt geht jedes fest verbaute
+Interface ein (`nic:<name>=<mac>`, alphabetisch sortiert). Virtuelle Netze
+(docker/veth/tun/vmnet/…) und USB-Adapter (Dock, Stick) bleiben draußen, weil
+sie abgezogen werden können. Testabdeckung: Seed-Stabilität und
+Virtuell-Filter als eigene Fälle.
+
 ### 2.0.4 — 29.10.2026
 
 **Stabile Player-ID (PLAYER-IDENTITY.md v1).** Neue Installationen leiten die
