@@ -250,6 +250,65 @@ fun SettingsScreen(vm: DesktopViewModel) {
 
         Spacer(Modifier.height(16.dp))
 
+        // ---- Wiedergabe-Engine (VLC / MPV) ----
+        Text(I18n.s("Wiedergabe-Engine"), color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        var engine by remember { mutableStateOf(AppSettings.engine()) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("vlc" to "VLC", "mpv" to "MPV").forEach { (e, label) ->
+                val active = engine == e
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (active) Accent else Card,
+                    modifier = Modifier.clickable {
+                        engine = e
+                        AppSettings.setEngine(e)
+                    }
+                ) {
+                    Text(label, color = if (active) AccentDark else TextMid, fontSize = 13.sp,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                }
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            I18n.s(
+                if (engine == "mpv")
+                    "MPV: bettet sich nativ ins Fenster ein, startet schneller. Jüngerer Windows-Pfad — bei Auffälligkeiten auf VLC zurückstellen."
+                else
+                    "VLC: ausgereift und auf beiden Systemen erprobt. Start braucht ~3 s (Plugin-Scan)."
+            ),
+            color = TextMid, fontSize = 12.sp
+        )
+        if (engine == "mpv") {
+            Spacer(Modifier.height(10.dp))
+            var mpvHw by remember { mutableStateOf(AppSettings.mpvHwDecoding()) }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf(true to "Hardware (GPU)", false to "Software (CPU)").forEach { (hw, label) ->
+                    val active = mpvHw == hw
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (active) Accent else Card,
+                        modifier = Modifier.clickable {
+                            mpvHw = hw
+                            AppSettings.setMpvHwDecoding(hw)
+                        }
+                    ) {
+                        Text(label, color = if (active) AccentDark else TextMid, fontSize = 13.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp))
+                    }
+                }
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(I18n.s("MPV-Decoding: Hardware ist bei 4K/H.265 Pflicht, kostet aber ~1 s mehr Startzeit."),
+                color = TextMid, fontSize = 12.sp)
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(I18n.s("Wirkt ab dem nächsten Player-Start, nicht während der laufenden Wiedergabe."),
+            color = TextMid, fontSize = 12.sp)
+
+        Spacer(Modifier.height(24.dp))
+
         // ---- Video-Decoding (HW/SW) ----
         Text(I18n.s("Video-Decoding"), color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(10.dp))
@@ -431,6 +490,32 @@ fun SettingsScreen(vm: DesktopViewModel) {
                 }
             }
         )
+
+        Spacer(Modifier.height(24.dp))
+
+        // ---- Version ----
+        // Kommt aus der generierten BuildInfo (build.gradle.kts), nicht aus
+        // einem hartkodierten String: so steht hier immer die Version, die
+        // tatsaechlich im Paket steckt.
+        Text(I18n.s("Version"), color = Accent, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(10.dp))
+        Row(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Card)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "Smartys IPTV ${BuildInfo.VERSION}",
+                color = TextHi, fontSize = 14.sp, fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                System.getProperty("os.name") ?: "",
+                color = TextMid, fontSize = 11.sp
+            )
+        }
     }
 
     // Profil hinzufügen

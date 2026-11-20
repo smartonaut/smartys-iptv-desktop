@@ -348,6 +348,11 @@ fun CategoryMenuDialog(
     var marked by remember { mutableStateOf(setOf(cat.id)) }
     var version by remember { mutableStateOf(0) }
     val visible = remember(cats, version) { CategoryPrefs.applyTo(scope, cats) }
+    // Über den sichtbaren Einstieg geöffnet: alle Gruppen vorab markieren
+    // ("MARKIERT = BEHALTEN") — dann blendet man gezielt die ab, die weg sollen.
+    LaunchedEffect(startMulti) {
+        if (startMulti && visible.isNotEmpty()) marked = visible.map { it.id }.toSet()
+    }
     val hiddenCount = cats.size - visible.size
 
     AlertDialog(
@@ -559,6 +564,7 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
 
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var catMenuFor by remember { mutableStateOf<Category?>(null) }
+    var catMenuMulti by remember { mutableStateOf(false) }
     var catsVersion by remember { mutableStateOf(0) }
     LaunchedEffect(vm.activeProfileId) { selectedCat = null; catsVersion++ }
     val shownCats = remember(vm.vodCategories, catsVersion, vm.activeProfileId) {
@@ -596,16 +602,31 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
                     fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth().combinedClickable(
                         onClick = { selectedCat = cat.id },
-                        onLongClick = { catMenuFor = cat }
+                        onLongClick = { catMenuMulti = false; catMenuFor = cat }
                     ).padding(horizontal = 16.dp, vertical = 8.dp))
             }
-            if (vm.vodCategories.size > shownCats.size) {
+            // Sichtbarer Einstieg — der Langdruck auf eine Gruppe allein findet
+            // kaum jemand (User-Befund: "das werden aber die wenigsten finden").
+            if (shownCats.isNotEmpty()) {
                 item {
-                    Text("⚙ ${vm.vodCategories.size - shownCats.size} ausgeblendet — verwalten",
+                    Text(I18n.s("⚙ Gruppen sortieren / ausblenden"),
+                        color = Accent, fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            catMenuMulti = true; catMenuFor = shownCats.firstOrNull()
+                        }.padding(horizontal = 16.dp, vertical = 10.dp))
+                }
+            }
+            val hiddenCats = vm.vodCategories.size - shownCats.size
+            if (hiddenCats > 0) {
+                item {
+                    Text(
+                        I18n.sf("⚙ {0} ausgeblendet — alle einblenden", hiddenCats),
                         color = TextMid, fontSize = 12.sp,
                         modifier = Modifier.fillMaxWidth().clickable {
-                            catMenuFor = vm.vodCategories.firstOrNull()
-                        }.padding(horizontal = 16.dp, vertical = 10.dp))
+                            CategoryPrefs.unhideAll("movies")
+                            catsVersion++
+                        }.padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
                 }
             }
         }
@@ -637,7 +658,8 @@ fun MoviesScreen(vm: DesktopViewModel, onOpenSeries: (SeriesStream) -> Unit, onO
     catMenuFor?.let { cat ->
         CategoryMenuDialog(
             scope = "movies", cat = cat, cats = vm.vodCategories,
-            onDismiss = { catMenuFor = null },
+            startMulti = catMenuMulti,
+            onDismiss = { catMenuFor = null; catMenuMulti = false },
             onChanged = { catsVersion++; if (selectedCat != null && CategoryPrefs.isHidden("movies", selectedCat!!)) selectedCat = null }
         )
     }
@@ -875,6 +897,7 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
 
     var selectedCat by remember { mutableStateOf<String?>(null) }
     var catMenuFor by remember { mutableStateOf<Category?>(null) }
+    var catMenuMulti by remember { mutableStateOf(false) }
     var catsVersion by remember { mutableStateOf(0) }
     LaunchedEffect(vm.activeProfileId) { selectedCat = null; catsVersion++ }
     val shownCats = remember(vm.seriesCategories, catsVersion, vm.activeProfileId) {
@@ -903,16 +926,30 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
                     fontSize = 14.sp,
                     modifier = Modifier.fillMaxWidth().combinedClickable(
                         onClick = { selectedCat = cat.id },
-                        onLongClick = { catMenuFor = cat }
+                        onLongClick = { catMenuMulti = false; catMenuFor = cat }
                     ).padding(horizontal = 16.dp, vertical = 8.dp))
             }
-            if (vm.seriesCategories.size > shownCats.size) {
+            // Sichtbarer Einstieg — wie bei Filmen, der Langdruck allein reicht nicht.
+            if (shownCats.isNotEmpty()) {
                 item {
-                    Text("⚙ ${vm.seriesCategories.size - shownCats.size} ausgeblendet — verwalten",
+                    Text(I18n.s("⚙ Gruppen sortieren / ausblenden"),
+                        color = Accent, fontSize = 12.sp,
+                        modifier = Modifier.fillMaxWidth().clickable {
+                            catMenuMulti = true; catMenuFor = shownCats.firstOrNull()
+                        }.padding(horizontal = 16.dp, vertical = 10.dp))
+                }
+            }
+            val hiddenCats = vm.seriesCategories.size - shownCats.size
+            if (hiddenCats > 0) {
+                item {
+                    Text(
+                        I18n.sf("⚙ {0} ausgeblendet — alle einblenden", hiddenCats),
                         color = TextMid, fontSize = 12.sp,
                         modifier = Modifier.fillMaxWidth().clickable {
-                            catMenuFor = vm.seriesCategories.firstOrNull()
-                        }.padding(horizontal = 16.dp, vertical = 10.dp))
+                            CategoryPrefs.unhideAll("series")
+                            catsVersion++
+                        }.padding(horizontal = 16.dp, vertical = 10.dp)
+                    )
                 }
             }
         }
@@ -941,7 +978,8 @@ fun SeriesScreen(vm: DesktopViewModel, onOpen: (SeriesStream) -> Unit) {
     catMenuFor?.let { cat ->
         CategoryMenuDialog(
             scope = "series", cat = cat, cats = vm.seriesCategories,
-            onDismiss = { catMenuFor = null },
+            startMulti = catMenuMulti,
+            onDismiss = { catMenuFor = null; catMenuMulti = false },
             onChanged = { catsVersion++; if (selectedCat != null && CategoryPrefs.isHidden("series", selectedCat!!)) selectedCat = null }
         )
     }

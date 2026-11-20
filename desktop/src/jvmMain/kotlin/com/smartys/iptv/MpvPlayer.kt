@@ -3,6 +3,7 @@ package com.smartys.iptv
 import java.awt.Canvas
 import java.io.File
 import javax.swing.SwingUtilities
+import kotlin.concurrent.thread
 
 /**
  * Desktop-Wiedergabe über libmpv (nativ, JNA-Bindings in MpvLib.kt).
@@ -31,11 +32,38 @@ class MpvPlayer : VodPlayerApi {
 
     /** Wird beim natürlichen Ende eines VOD-Titels aufgerufen. */
     override var onVodEnded: (() -> Unit)? = null
+    /**
+     * Video-Output bereit. mpv liefert kein eigenes videoOutput-Event wie VLC,
+     * deshalb feuert der Player das selbst: sobald play() den Befehl angenommen
+     * hat und der Canvas gemappt ist. Der Aufrufer blendet daraufhin den
+     * Lade-Indikator aus.
+     */
+    override var onVideoOutput: (() -> Unit)? = null
     var onClosed: (() -> Unit)? = null
     var onChannelStep: ((Int) -> Unit)? = null
 
     private var currentUrl: String? = null
     private var currentIsVod = false
+
+    /** Position beim Pausieren — für den Resume-Reconnect-Fix (siehe resume()). */
+    private var pausedPosMs = 0L
+
+    /** Ausstehender Seek nach play(): analog VLC — seek direkt nach loadfile
+     *  verpufft bei 302-Redirects (signierte URL), deshalb beim
+     *  PLAYBACK_RESTART-Event nachholen, falls die Position nicht stimmt. */
+    private var pendingSeekMs = 0L
+    /** Live-Fallback: Original-.m3u8, falls der .ts-Sofortversuch scheitert. */
+    private var liveHlsFallback: String? = null
+    private var liveStartedAt = 0L
+
+    /** Einfache Datei-Log für GUI-Diagnose (stderr versinkt bei jpackage-Apps). */
+    private fun dbg(msg: String) {
+        runCatching {
+            val f = File(System.getProperty("user.home"), ".smartys-iptv/player.log")
+            f.parentFile?.mkdirs()
+            f.appendText("[${System.currentTimeMillis()}] $msg\n")
+        }
+    }
 
     /**
      * Initialisiert libmpv (einmal pro Player). Muss auf dem EDT laufen,
@@ -72,6 +100,14 @@ class MpvPlayer : VodPlayerApi {
             // Schnellerer Senderwechsel: kein Stream-Probing + kein Pausieren beim Puffern
             MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-lavf-probe-info", "nostreams")
             MpvLib.INSTANCE.mpv_set_option_string(ctx, "cache-pause", "no")
+            // Live-Start am Live-RAND statt 3 Segmente dahinter (FFmpeg-Default
+            // live_start_index=-3): Der Anbieter (smartytv/line.smartytv.xyz) rotiert
+            // die .ts-Segment-URLs SOFORT — die letzten 3 Playlist-Einträge sind
+            // beim neuen Einstieg bereits geloescht und liefern HTTP 403. Gemessen
+            // (mpv.log 08.11.): Segmente 17-19 alle 403, 10 s Playlist-Reload-Warte-
+            // schleife, erst Segment 20 -> 200 OK. Mit live_start_index=0 startet
+            // der Stream in ~1,5 s statt ~11 s.
+            MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-lavf-o", "live_start_index=0")
             // Stream-Puffer in Sekunden (Einstellung, User-Vorgabe):
             // 0 = kein Cache (Bild startet sofort), >0 = vorhalten gegen Freezer.
             val cacheSecs = AppSettings.cacheSeconds()
@@ -85,12 +121,34 @@ class MpvPlayer : VodPlayerApi {
                 val maxMiB = (cacheSecs * 8).coerceAtMost(128)
                 MpvLib.INSTANCE.mpv_set_option_string(ctx, "demuxer-max-bytes", "${maxMiB}MiB")
             }
-            // Software-Decoding: initiiert schneller als hwdec-Erkennung (auto-safe)
-            MpvLib.INSTANCE.mpv_set_option_string(ctx, "hwdec", "no")
+            // Hardware-Decoding optional (Einstellungen → Wiedergabe-Engine).
+            // "auto-safe" laesst libmpv den besten Pfad waehlen; "no" initiiert
+            // etwas schneller, rechnet aber jeden Frame auf der CPU — bei
+            // 4K/H.265 ist das unbrauchbar. Default ist deshalb Hardware an.
+            MpvLib.INSTANCE.mpv_set_option_string(
+                ctx, "hwdec", if (AppSettings.mpvHwDecoding()) "auto-safe" else "no"
+            )
             // Vulkan (gpu-next) schlägt auf Hybrid-GPU/Wayland fehl (VK_ERROR_OUT_OF_DEVICE_MEMORY)
             // — OpenGL-Renderer erzwingen, der hier zuverlässig läuft (VAAPI).
             MpvLib.INSTANCE.mpv_set_option_string(ctx, "vo", "gpu")
-            MpvLib.INSTANCE.mpv_set_option_string(ctx, "gpu-api", "opengl")
+            // Windows: D3D11 ist der native Weg für eingebettetes Rendering (wid).
+            // Der OpenGL/WGL-Pfad auf einem fremden HWND ist unzuverlässig —
+            // deshalb dort explizit D3D11 statt opengl.
+            val isWin = System.getProperty("os.name").lowercase().contains("win")
+            if (isWin) {
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "gpu-api", "d3d11")
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "gpu-context", "d3d11")
+            } else {
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "gpu-api", "opengl")
+            }
+            // Diagnose: mpv schreibt eine eigene Logdatei. Bei GUI-Apps (jpackage)
+            // landet stderr nirgends, deshalb ist das die einzige Spur bei Abstürzen.
+            runCatching {
+                val mpvLog = File(System.getProperty("user.home"), ".smartys-iptv/mpv.log")
+                mpvLog.parentFile?.mkdirs()
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "log-file", mpvLog.absolutePath)
+                MpvLib.INSTANCE.mpv_set_option_string(ctx, "log-file-level", "debug")
+            }
 
             // Native Window-ID des Canvas setzen (X11/HWND), damit libmpv
             // direkt hinein rendert.
@@ -118,6 +176,7 @@ class MpvPlayer : VodPlayerApi {
 
             handle = ctx
             running = true
+            dbg("init OK (os=${System.getProperty("os.name")}), Event-Loop startet")
             startEventLoop()
             true
         }.getOrElse { e ->
@@ -129,11 +188,50 @@ class MpvPlayer : VodPlayerApi {
     private fun startEventLoop() {
         eventThread = Thread {
             val ctx = handle ?: return@Thread
+            var restarts = 0
             while (running) {
-                val evPtr = MpvLib.INSTANCE.mpv_wait_event(ctx, 0.5)
-                val ev = MpvEvent(evPtr)
-                when (ev.event_id) {
-                    MpvEvent.EVENT_PLAYBACK_RESTART -> playing = true
+                try {
+                    val evPtr = MpvLib.INSTANCE.mpv_wait_event(ctx, 0.5)
+                    if (evPtr == null) { dbg("wait_event -> NULL, Event-Loop endet"); break }
+                    val ev = MpvEvent(evPtr)
+                    // JNA liest die native Struktur NICHT automatisch beim direkten
+                    // Feldzugriff (@JvmField). Ohne read() blieb event_id immer 0 —
+                    // kein einziges mpv-Event wurde bearbeitet, videoReady blieb false,
+                    // der Player zeigte ewig "Verbinde..." obwohl mpv längst spielte.
+                    // Bewiesen (MpvReadProof, 08.11.): ohne read() 0 Events, mit 10.
+                    ev.read()
+                    if (ev.event_id != MpvEvent.EVENT_NONE && ev.event_id != MpvEvent.EVENT_PROPERTY_CHANGE) {
+                        dbg("Event empfangen: id=${ev.event_id} (restart=21, file-loaded=8, end=7)")
+                    }
+                    when (ev.event_id) {
+                    MpvEvent.EVENT_PLAYBACK_RESTART -> {
+                        playing = true
+                        restarts++
+                        dbg("PLAYBACK_RESTART #$restarts empfangen, onVideoOutput gesetzt=${onVideoOutput != null}")
+                        // Erster Frame ist gerendert — erst JETzt den Canvas
+                        // sichtbar schalten (videoReady beim Aufrufer). Feuert
+                        // auch nach Senderwechsel/Seek erneut; das ist harmlos,
+                        // videoReady ist idempotent.
+                        javax.swing.SwingUtilities.invokeLater {
+                            dbg("invokeLater: onVideoOutput feuern (gesetzt=${onVideoOutput != null})")
+                            onVideoOutput?.invoke()
+                            dbg("invokeLater: fertig")
+                        }
+                        // Resume-Absicherung: seek direkt nach loadfile verpufft
+                        // bei 302-Redirects (signierte URL) — Position hier, im
+                        // spielenden Zustand, nachholen.
+                        val target = pendingSeekMs
+                        if (target > 0) {
+                            pendingSeekMs = 0
+                            thread(isDaemon = true, name = "mpv-pending-seek") {
+                                Thread.sleep(400)
+                                if (currentPositionMs() < target - 5000) {
+                                    dbg("pending-seek: Position ${currentPositionMs()} < $target, hole nach")
+                                    seekTo(target)
+                                }
+                            }
+                        }
+                    }
                     MpvEvent.EVENT_PROPERTY_CHANGE -> {
                         when (ev.reply_userdata) {
                             2L -> {
@@ -154,6 +252,18 @@ class MpvPlayer : VodPlayerApi {
                             // Live (Floating): reason auslesen — mpv_event_end_file.reason
                             // 0=EOF, 2=STOP, 3=QUIT, 4=ERROR, 5=REDIRECT
                             val reason = ev.data?.getInt(0) ?: -1
+                            // Hintergrund-Fallback: .ts-Sofortstart gescheitert
+                            // (Anbieter ohne TS-Endpunkt) -> sofort mit der
+                            // Original-.m3u8 weitermachen, ohne Nutzer-Dialog.
+                            if (reason == 4 && liveHlsFallback != null &&
+                                System.currentTimeMillis() - liveStartedAt < 15_000) {
+                                val fb = liveHlsFallback
+                                liveHlsFallback = null
+                                if (fb != null) {
+                                    dbg("Live .ts gescheitert (reason=4) -> Fallback auf .m3u8")
+                                    MpvLib.INSTANCE.mpv_command(ctx, arrayOf("loadfile", fb, "replace"))
+                                }
+                            }
                             // QUIT (3) = mpv-Fenster wurde geschlossen (X)
                             if (reason == 3) {
                                 running = false
@@ -168,6 +278,11 @@ class MpvPlayer : VodPlayerApi {
                         onClosed?.invoke()
                     }
                     MpvEvent.EVENT_SHUTDOWN -> running = false
+                    }
+                } catch (t: Throwable) {
+                    // Der Event-Loop darf NICHT still sterben: playing/Watchdog und
+                    // v.a. das onVideoOutput-Signal (Canvas sichtbar) hängen an ihm.
+                    dbg("EVENT-LOOP EXCEPTION: ${t.javaClass.simpleName}: ${t.message} — laufe weiter")
                 }
             }
             // mpv sauber beenden, damit das Fenster wirklich schließt
@@ -183,20 +298,22 @@ class MpvPlayer : VodPlayerApi {
     /** Ermittelt die native Window-ID des AWT-Canvas (X11 auf Linux, HWND auf Windows). */
     private fun nativeWindowId(canvas: Canvas): Long? {
         return runCatching {
-            // Canvas muss sichtbar sein, damit der native Peer existiert.
+            // Canvas muss sichtbar sein, damit das native Fenster existiert.
             if (!canvas.isDisplayable) return@runCatching null
-            // getPeer() ist public, aber sein Rückgabetyp (java.awt.peer) ist in
-            // JDK 9+ nicht exportiert — deshalb via Reflection aufrufen.
-            val getPeer = java.awt.Component::class.java.getMethod("getPeer")
-            val peer: Any = getPeer.invoke(canvas) ?: return@runCatching null
-            // X11: sun.awt.X11.XWindowPeer.getWindow(); Windows: WComponentPeer.getHWnd()
-            val methods = (peer.javaClass.methods + peer.javaClass.declaredMethods)
-                .distinctBy { it.name to it.parameterTypes.size }
-            val m = methods.firstOrNull { it.name == "getWindow" || it.name == "getHWnd" }
-                ?: return@runCatching null
-            m.isAccessible = true
-            (m.invoke(peer) as? Number)?.toLong()
-        }.getOrNull()
+            // JNA nutzt das AWT Native Interface (JAWT) und liefert die echte
+            // native ID: HWND unter Windows, X11-Window unter Linux.
+            //
+            // FRÜHER: Reflection auf Component.getPeer() + getHWnd(). Das war
+            // die Ursache für das weiße Bild unter Windows — getPeer() existiert
+            // in JDK 17 nicht mehr (NoSuchMethodException), die Funktion gab
+            // damit IMMER null zurück, "wid" blieb ungesetzt und libmpv öffnete
+            // ein eigenes Fenster statt im Player-Canvas zu rendern.
+            val id = com.sun.jna.Native.getComponentID(canvas)
+            if (id == 0L) null else id
+        }.getOrElse { e ->
+            System.err.println("[MpvPlayer] nativeWindowId fehlgeschlagen: ${e.javaClass.simpleName}: ${e.message}")
+            null
+        }
     }
 
     /** Fenster-Geometrie (x, y, Breite, Höhe) in Pixeln — zum Mitziehen des Overlays. */
@@ -213,9 +330,26 @@ class MpvPlayer : VodPlayerApi {
     /** Stream/MRL abspielen. isVod = true verhindert Reconnect und feuert onVodEnded. */
     override fun play(url: String, isVod: Boolean, timeshift: Boolean, timeshiftDir: String?, startPosMs: Long) {
         val ctx = handle ?: return
+        dbg("play: vod=$isVod url=${url.take(80)}")
         currentUrl = url
         currentIsVod = isVod
-        val args = arrayOf("loadfile", url, "replace")
+        pendingSeekMs = startPosMs
+        // Live-TV: SOFORT den direkten TS-Strom laden (kein Vorab-Check, kein
+        // Blockieren). Am Anbieter gemessen (08.11., PC Mama): .ts startet in
+        // 0,4 s, HLS .m3u8 braucht 11-12 s, weil die Segment-Tokens des ersten
+        // Playlist-Abrufs 403 liefern und FFmpeg erst nach einem Segment-Turnus
+        // neu lädt. Schlägt .ts fehl (Anbieter ohne TS-Endpunkt), fällt der
+        // Event-Loop im Hintergrund automatisch auf .m3u8 zurück — der Nutzer
+        // wartet dann wie bisher, aber nie länger.
+        var playUrl = url
+        liveHlsFallback = null
+        if (!isVod && url.endsWith(".m3u8")) {
+            liveHlsFallback = url
+            playUrl = url.removeSuffix(".m3u8") + ".ts"
+            liveStartedAt = System.currentTimeMillis()
+            dbg("Live: versuche .ts-Sofortstart, Fallback=${url.take(60)}")
+        }
+        val args = arrayOf("loadfile", playUrl, "replace")
         MpvLib.INSTANCE.mpv_command(ctx, args)
         // Resume: Seek direkt nach loadfile (mpv queued die Befehle — vor dem
         // VLC-Umbau so bewährt). "start"-Property bewusst NICHT setzen, sie
@@ -230,14 +364,33 @@ class MpvPlayer : VodPlayerApi {
                 MpvLib.INSTANCE.mpv_set_option_string(ctx, "record-file", it + "/timeshift.ts")
             }
         }
+        // mpv kennt kein videoOutput-Event wie VLC. "Bereit" melden wir deshalb
+        // erst bei MPV_EVENT_PLAYBACK_RESTART im Event-Loop — dort ist der erste
+        // Frame garantiert gerendert. Früher feuerte play() das Signal sofort
+        // nach loadfile: der Canvas ging auf Vollbild, bevor mpv etwas gezeichnet
+        // hatte, und das ungefüllte native Child-Fenster zeigte sich 3-5 s WEISS.
     }
 
     override fun pause() {
+        pausedPosMs = currentPositionMs()
         handle?.let { MpvLib.INSTANCE.mpv_set_property_string(it, "pause", "yes") }
     }
 
     override fun resume() {
+        val pos = pausedPosMs
         handle?.let { MpvLib.INSTANCE.mpv_set_property_string(it, "pause", "no") }
+        // Analog VLC: beim Pausieren stoppt mpv das HTTP-Lesen (v.a. bei
+        // cache=no), der signierte Token laeuft ab, Resume startet dann bei 0.
+        // Position nach kurzer Wartezeit nachholen, falls verloren.
+        if (pos > 3000 && currentIsVod) {
+            thread(isDaemon = true, name = "mpv-resume-check") {
+                Thread.sleep(1000)
+                if (currentPositionMs() < 2000) {
+                    dbg("resume: Position verloren (war $pos ms), seek zurueck")
+                    seekTo(pos)
+                }
+            }
+        }
     }
 
     override fun stop() {
@@ -298,7 +451,7 @@ class MpvPlayer : VodPlayerApi {
         }
     }
 
-    fun hideOsd() {
+    override fun hideOsd() {
         handle?.let { MpvLib.INSTANCE.mpv_command(it, arrayOf("show-text", "", "0")) }
     }
 

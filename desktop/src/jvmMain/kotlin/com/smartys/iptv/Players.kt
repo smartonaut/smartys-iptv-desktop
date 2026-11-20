@@ -398,7 +398,14 @@ private fun EdgeStrip(
 
 @Composable
 fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: () -> Unit) {
-    val player = remember { VlcPlayer() }
+    // Engine wählbar (Einstellungen → Wiedergabe-Engine). Default VLC: erprobt
+    // auf beiden Plattformen. MPV bettet sich nativ ein und startet schneller,
+    // der Windows-Pfad ist aber juenger (siehe CHANGELOG 1.5.11: mpv-Embedding
+    // fror unter Windows strukturell ein). Der Umschalter dient dem A/B-Vergleich
+    // auf echter Hardware; bei Auffälligkeiten zurück auf VLC.
+    val player: VodPlayerApi = remember {
+        if (AppSettings.engine() == "mpv") MpvPlayer() else VlcPlayer()
+    }
     val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
     // Video-Output bereit? Erst dann den Canvas sichtbar schalten — das
@@ -491,11 +498,19 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
         var letztePos = -1L
         var stillMs = 0L
         var versuche = 0
+        var pauseMs = 0L      // Zusatzwartezeit nach mehreren Fehlversuchen
         while (true) {
             kotlinx.coroutines.delay(1000)
             if (paused) {
                 letztePos = -1L; stillMs = 0L
                 continue
+            }
+            // Nach einer Fehlerserie erst wieder anklopfen, wenn die Pause
+            // abgelaufen ist — sonst läuft der Player im Dauerfeuer gegen ein
+            // Verbindungslimit (HTTP 509) des Anbieters.
+            if (pauseMs > 0L) {
+                pauseMs -= 1000L
+                if (pauseMs > 0L) continue
             }
             val pos = player.currentPositionMs()
             if (pos <= 0L) {
@@ -508,14 +523,21 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                 letztePos = pos
                 stillMs = 0L
                 versuche = 0
+                pauseMs = 0L
                 reconnects = 0
             } else {
                 stillMs += 1000L
                 if (stillMs >= 3_000L) {
                     stillMs = 0L
-                    if (versuche < 3) {
-                        versuche++
-                        reconnects = versuche
+                    // Der Watchdog darf NIE endgültig aufgeben: ein Stream, der
+                    // nach dem dritten Versuch noch nicht antwortet, ist oft
+                    // Sekunden später wieder da (Anbieter-Limit, WLAN-Aussetzer).
+                    // Früher stand hier ein `break` — danach blieb das Bild
+                    // schwarz und nichts passierte mehr, bis der Nutzer den
+                    // Kanal manuell neu wählte.
+                    versuche++
+                    reconnects = versuche
+                    if (versuche <= 3) {
                         player.showOsd(
                             "🔄 " + I18n.s("Keine Daten — verbinde neu") + " ($versuche/3)",
                             3000, MarqueePosition.BOTTOM, java.awt.Color.WHITE
@@ -526,11 +548,20 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
                         )
                         letztePos = -1L
                     } else {
+                        // Weiter versuchen, aber langsamer: 10 s, 20 s, dann
+                        // dauerhaft alle 30 s. Der Nutzer sieht, dass etwas
+                        // läuft, statt auf ein eingefrorenes Bild zu starren.
+                        pauseMs = minOf(10_000L * (versuche - 2), 30_000L)
                         player.showOsd(
-                            "⚠ " + I18n.s("Stream antwortet nicht — Zurück und Kanal neu wählen"),
-                            5000, MarqueePosition.BOTTOM, java.awt.Color.WHITE
+                            "🔄 " + I18n.s("Stream antwortet nicht — neuer Versuch") +
+                                    " ($versuche, " + (pauseMs / 1000) + "s)",
+                            3000, MarqueePosition.BOTTOM, java.awt.Color.WHITE
                         )
-                        break
+                        player.play(
+                            url, isVod = false, timeshift = timeshift,
+                            timeshiftDir = timeshiftDir, startPosMs = 0
+                        )
+                        letztePos = -1L
                     }
                 }
             }
@@ -829,10 +860,14 @@ fun LivePlayerScreen(ch: LiveStream, url: String, vm: DesktopViewModel, onBack: 
 
 @Composable
 fun VodPlayerScreen(vp: VodPlaying, vm: DesktopViewModel, onBack: () -> Unit) {
-    // VOD läuft auf VLC (wie Live-TV). 1.5.11: auch Windows — das mpv-Embedding
-    // frierte unter Windows strukturell ein (saubere DLL + erster Steuerbefehl
-    // = Bild/App tot). Linux-Verhalten unveraendert (VlcPlayer war dort aktiv).
-    val player = remember { VlcPlayer() }
+    // Engine wählbar (Einstellungen → Wiedergabe-Engine), Default VLC.
+    // 1.5.11: mpv-Embedding fror unter Windows strukturell ein (saubere DLL +
+    // erster Steuerbefehl = Bild/App tot) — dieser Pfad ist deshalb NICHT der
+    // Standard. Er bleibt über den Umschalter erreichbar, damit sich beide
+    // Engines auf echter Hardware vergleichen lassen.
+    val player: VodPlayerApi = remember {
+        if (AppSettings.engine() == "mpv") MpvPlayer() else VlcPlayer()
+    }
     val canvas = remember { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember { mutableStateOf(false) }
     // Weiß-Screen-Fix (wie Live-TV): das VLC-Child-Fenster mappt WEISS bis

@@ -7,7 +7,138 @@ unabhängig gebaut und versioniert — die Nummern dürfen auseinanderlaufen.
 
 ---
 
+## Windows (msi)
+
+### 2.2.8 — 11.11.2026 (deployt auf player.smartys.tech)
+
+- **VOD-Pause & Weiterschauen repariert.** Film sprang beim Pausieren
+  (Leertaste) und beim Fortsetzen nach einer Unterbrechung wieder auf den
+  Anfang zurück: Der Stream läuft über eine signierte, zeitlich begrenzte URL
+  (302-Redirect); beim Pausieren läuft der Token ab, `--http-reconnect`
+  verbindet neu und startet bei 0. Die Position wird jetzt beim Pausieren
+  gemerkt und beim Resume/Weiterschauen nachgeholt — fällt `:start-time` am
+  Redirect weg, setzt ein Seek im „spielt jetzt"-Zustand (VLC `playing`,
+  MPV `PLAYBACK_RESTART`) die Position wieder. In beiden Engines (VLC + MPV).
+- SHA256 `89e0d2df…6453d`, 344.246.748 Bytes, Range-GET 206 verifiziert.
+
+### 2.2.7 — 08.11.2026 (deployt auf player.smartys.tech)
+
+- **Live-TV startet unter 1 Sekunde.** mpv lädt Live-Streams direkt als
+  TS-Strom (.m3u8 → .ts, gemessen 0,4 s statt 11-12 s): Der Anbieter signiert
+  Segment-URLs pro Playlist-Abruf, der erste Abruf liefert ungültige Tokens
+  (HTTP 403) und FFmpeg wartet erst nach einem Segment-Turnus neu — VLC
+  refetcht sofort, deshalb wirkte mpv "langsamer". Kein Vorab-Check (User-
+  Vorgabe): sofort starten, und nur wenn .ts scheitert, wechselt der
+  Event-Loop im Hintergrund automatisch auf .m3u8 (Fallback, max. 15 s).
+- **2.2.6 (WURZELFIX): MpvEvent.read() fehlte.** JNA liest @JvmField-Felder
+  nicht automatisch — event_id blieb immer 0, kein mpv-Event wurde je
+  bearbeitet: ewiges "Verbinde…" bei Live-TV mit laufendem Ton. Bewiesen
+  (MpvReadProof): ohne read() 0 Events, mit read() 10.
+- **2.2.5/2.2.4:** Diagnose-Logging (~/.smartys-iptv/player.log, Event-Loop
+  exception-fest) + live_start_index=0 (brachte allein nichts — die 403er
+  kommen vom Anbieter-Pfad, nicht vom Start-Index).
+- **2.2.2:** Kein weißer Screen mehr beim mpv-Streamstart — onVideoOutput
+  feuert erst bei PLAYBACK_RESTART statt sofort nach loadfile.
+- SHA256 `6adc16e3…902133c`, 344.242.653 Bytes, Range-GET 206 verifiziert,
+  UpgradeCode {402511A4-…} unverändert. **Weiterhin unsigniert** →
+  Smart App Control blockt (siehe Hinweiskasten auf der Download-Seite).
+
+### 2.2.1 — 08.11.2026
+
+- **MPV-Engine unter Windows repariert.** Ursache des weißen Bildes und des
+  Absturzes: `MpvPlayer.nativeWindowId()` holte die Fenster-ID per Reflection
+  über `Component.getPeer()` — diese Methode existiert in JDK 17 nicht mehr.
+  Der Aufruf warf `NoSuchMethodException`, die Funktion gab immer `null`
+  zurück, `wid` blieb ungesetzt und libmpv öffnete ein eigenes Fenster statt
+  im Player-Canvas zu rendern.
+- **Fenster-ID jetzt über JNA/JAWT** (`Native.getComponentID`) — liefert HWND
+  unter Windows und X11-Window unter Linux.
+- **Windows rendert mit D3D11** statt OpenGL. Auf dem Ziel-PC gemessen:
+  `gpu-api=d3d11` rendert Frames (`VO: [gpu]`, Fortschritt bis 65 %),
+  `gpu-api=opengl` auf einem fremden HWND beendet den Prozess sofort.
+- **mpv-Logdatei** unter `~/.smartys-iptv/mpv.log` (Level debug) — bei
+  jpackage-GUI-Apps landet stderr nirgends, ohne Logdatei ist ein Absturz
+  nicht diagnostizierbar.
+
+### 2.2.0 — 08.11.2026
+
+Wiedergabe-Engine im Player umschaltbar: VLC oder MPV.
+
+- **Einstellungen → Wiedergabe-Engine.** Zwei Schaltflaechen (VLC / MPV),
+  wirkt ab dem naechsten Player-Start. Gilt fuer Live-TV, VOD und MultiView.
+- **MPV-Hardware-Decoding einstellbar** (eigener Schalter, nur bei MPV
+  sichtbar). Vorher war `hwdec` hart auf `no` gesetzt — bewusst fuer schnellen
+  Init, aber bei 4K/H.265 rechnet dann die CPU jeden Frame. Default jetzt
+  `auto-safe`, Software bleibt als Option.
+- **VodPlayerApi erweitert**, damit beide Engines gegeneinander laufen:
+  `onVideoOutput`, `showCard`, `setLogo`, `seekBy`, `hideOsd` sind jetzt Teil
+  des Interfaces. VLC ueberschreibt sie mit seiner Implementierung, MPV erbt
+  sinnvolle Defaults (showCard wird zu show-text, seekBy zu seekTo).
+- **MPV meldet Video-Bereitschaft selbst.** mpv hat kein videoOutput-Event wie
+  VLC — der Player feuert `onVideoOutput` nach angenommenem `loadfile`, damit
+  der Lade-Indikator auch dort verschwindet.
+- **Bekannte Einschraenkung:** 1.5.11 dokumentiert, dass das mpv-Embedding
+  unter Windows strukturell einfror (Bild/App tot nach dem ersten
+  Steuerbefehl). VLC bleibt deshalb der Default. Der Umschalter ist
+  ausdruecklich zum A/B-Vergleich auf echter Hardware gedacht — bei
+  Auffaelligkeiten zurueck auf VLC.
+
+### 2.1.0 — 08.11.2026
+
+Performance: GUI friert beim Mausbewegen nicht mehr ein, erster Film startet schneller.
+
+- **OSD-Karte wird gecacht.** Bisher wurde bei jeder Mausbewegung ein
+  BufferedImage gemalt, als PNG auf die Platte geschrieben und VLC
+  untergeschoben (Messung app.log: 2320 PNG-Writes bei 4715 Maus-Events).
+  Bei unveraendertem Inhalt wird jetzt nur noch der Ausblend-Timer neu
+  aufgezogen — kein Rendern, kein Schreiben, kein Filter-Churn.
+- **OSD-Rendering aus dem EDT ausgelagert.** `renderCardPng()` lief auf dem
+  Event Dispatch Thread, also auf demselben Thread, der die Oberflaeche
+  zeichnet. Dadurch stockte die gesamte GUI. Laeuft jetzt in einem
+  Daemon-Thread; der AWT-Fenster-Fallback bleibt auf dem EDT.
+
+### 2.0.9 — 07.11.2026
+
+- **Gruppen in Filme/Serien jetzt sichtbar verwaltbar.** Unten in der
+  Kategorie-Sidebar steht ein Eintrag **„⚙ Gruppen sortieren / ausblenden"**
+  (öffnet den Mehrfach-Dialog mit allen Gruppen vorab markiert). Der
+  Langdruck auf eine Gruppe bleibt unverändert.
+  Grund: Der Einstieg existierte nur als Langdruck und war damit praktisch
+  unauffindbar; in Filme/Serien gab es außerdem gar keinen sichtbaren Punkt,
+  weil der „ausgeblendet"-Hinweis erst nach dem ersten Ausblenden erscheint.
+- **„⚙ N ausgeblendet — alle einblenden"** in beiden Ansichten — ein Klick
+  holt alle Gruppen zurück (vorher öffnete der Hinweis nur den Dialog).
+- MSI: `SmartysIPTV-2.0.9.msi`, ProductVersion 2.0.9, UpgradeCode
+  {402511A4-…} unverändert, SHA256
+  `7b935584…7c604326`, Deploy verifiziert (206, 344.230.359 Bytes).
+  **Weiterhin unsigniert** → Smart App Control blockt; siehe `CODE-SIGNING.md`.
+
+### 2.0.8 — 07.11.2026
+
+- **Versionsanzeige in den Einstellungen** — kommt aus der beim Build
+  generierten `BuildInfo.kt` (`appVersion` in `build.gradle.kts`), nicht aus
+  einem hartkodierten String; zeigt Paketversion + OS an.
+- **Live-Watchdog gibt nie auf:** nach 3 Fehlversuchen statt Abbruch weiter
+  reconnecten mit Backoff (10 s, 20 s, dann alle 30 s) — vorher blieb das
+  Bild schwarz, bis der Nutzer den Kanal manuell neu wählte.
+- MSI gebaut auf PC-Mama (Thinky aus): `SmartysIPTV-2.0.8.msi`,
+  ProductVersion 2.0.8, UpgradeCode {402511A4-...} entspricht `upgradeUuid`
+  (ersetzt bestehende Installation), SHA256
+  `a44c5bf6...8fd2e5b6`, Deploy auf player.smartys.tech verifiziert (206,
+  344.222.171 Bytes).
+
+---
+
 ## Linux (deb/rpm)
+
+### 2.0.6 — 30.10.2026
+
+- **Absturz beim Stoppen der Wiedergabe behoben (SIGSEGV in libpulse).**
+  `stop()` läuft seit 1.8.0 in einem eigenen Thread, `release()` hat aber nicht
+  darauf gewartet: `factory.release()` räumte die libVLC-Instanz ab, während
+  `libvlc_media_player_stop()` noch lief — der Pulse-Audio-Thread von VLC
+  stürzte danach in freigegebenem Speicher ab. `release()` joint den
+  `vlc-stop`-Thread jetzt (max. 3 s), bevor der native Player freigegeben wird.
 
 ### 2.0.5 — 29.10.2026
 

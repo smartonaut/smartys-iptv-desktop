@@ -85,6 +85,32 @@ object AppSettings {
 
     fun setLanguage(code: String) = set("language", code)
 
+    // ---------- Wiedergabe-Engine (VLC oder MPV) ----------
+
+    /**
+     * Wiedergabe-Engine: "vlc" (Standard) oder "mpv".
+     *
+     * VLC ist ausgereift und laeuft auf beiden Plattformen, braucht unter
+     * Windows aber Fenster-Tricks (Click-Through per WinAPI, --no-mouse-events)
+     * und scannt beim Init alle Plugins (~3 s).
+     *
+     * MPV bettet sich nativ in das HWND ein (keine Tricks), startet schneller
+     * und rendert ueber vo=gpu, ist im Windows-Pfad aber juenger. Der
+     * Umschalter existiert, damit sich beide Engines auf echter Hardware
+     * vergleichen lassen, ohne eine neue Version bauen zu muessen.
+     *
+     * Wirkt ab dem naechsten Player-Start (Screen-Wechsel), nicht mitten
+     * in der laufenden Wiedergabe.
+     */
+    fun engine(): String = get("engine", "vlc")
+
+    fun setEngine(name: String) = set("engine", if (name == "mpv") "mpv" else "vlc")
+
+    /** Hardware-Decoding fuer die MPV-Engine (nur dort wirksam). */
+    fun mpvHwDecoding(): Boolean = get("mpv_hwdec", "true").toBoolean()
+
+    fun setMpvHwDecoding(enabled: Boolean) = set("mpv_hwdec", enabled.toString())
+
     // ---------- Video-Decoding (automatisch erkannt) ----------
 
     /**

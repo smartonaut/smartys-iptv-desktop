@@ -20,6 +20,13 @@ interface VodPlayerApi {
     /** Wird beim natürlichen Ende eines VOD-Titels aufgerufen. */
     var onVodEnded: (() -> Unit)?
 
+    /**
+     * Video-Output ist bereit — erst dann darf der Canvas sichtbar werden.
+     * VLC feuert das aus seinem videoOutput-Event, mpv direkt nach dem ersten
+     * erfolgreichen play(), weil es kein äquivalentes Event liefert.
+     */
+    var onVideoOutput: (() -> Unit)?
+
     /** Eine wählbare Tonspur oder Untertitelspur. */
     data class Spur(val id: Int, val name: String)
 
@@ -59,4 +66,32 @@ interface VodPlayerApi {
         position: MarqueePosition = MarqueePosition.BOTTOM,
         color: java.awt.Color = java.awt.Color.WHITE
     )
+
+    /**
+     * Rich-OSD-Karte (Titel, Untertitel, Fortschrittsbalken, Senderlogo).
+     *
+     * VLC rendert sie als transparentes PNG über den Logo-Filter (echtes Alpha,
+     * skaliert mit Vollbild mit). mpv hat diesen Filter nicht und bekommt hier
+     * eine Text-Näherung über show-text — bewusst schlicht, weil das OSD für
+     * die Bedienung reicht und die Engine-Empfehlung VLC bleibt.
+     */
+    fun showCard(card: VlcPlayer.OsdCard, timeoutMs: Int = 5000) {
+        val text = listOfNotNull(
+            card.title.takeIf { it.isNotBlank() },
+            card.sub.takeIf { it.isNotBlank() },
+            card.extra?.takeIf { it.isNotBlank() }
+        ).joinToString("  ·  ")
+        showOsd(text, timeoutMs)
+    }
+
+    /** Senderlogo für das OSD setzen (nur VLC nutzt das wirklich). */
+    fun setLogo(path: String?) {}
+
+    /** Relativ springen (Sekunden-Buttons). */
+    fun seekBy(deltaMs: Long) {
+        seekTo((currentPositionMs() + deltaMs).coerceAtLeast(0L))
+    }
+
+    /** OSD sofort ausblenden. */
+    fun hideOsd() {}
 }

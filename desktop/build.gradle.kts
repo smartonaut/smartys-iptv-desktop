@@ -7,6 +7,38 @@ plugins {
     id("org.jetbrains.kotlin.plugin.noarg")
 }
 
+/**
+ * EINE Quelle fuer die Versionsnummer. Sie geht sowohl ins Paket
+ * (packageVersion) als auch in die generierte BuildInfo.kt, die die App unter
+ * Einstellungen anzeigt. Frueher stand die Nummer nur im Paket — die App
+ * selbst konnte sie nicht anzeigen, und eine hartkodierte Fusszeile waere beim
+ * naechsten Bump stehengeblieben.
+ */
+val appVersion = "2.2.8"
+
+// Erzeugt BuildInfo.kt mit der Version. Laeuft bei jedem Build neu, damit die
+// angezeigte Nummer nicht von der Paketversion weglaufen kann.
+val generateBuildInfo by tasks.registering {
+    val outDir = layout.buildDirectory.dir("generated/buildInfo")
+    val ver = appVersion
+    outputs.dir(outDir)
+    inputs.property("version", ver)
+    doLast {
+        val f = outDir.get().file("BuildInfo.kt").asFile
+        f.parentFile.mkdirs()
+        f.writeText(
+            """
+            package com.smartys.iptv
+
+            /** Automatisch erzeugt von build.gradle.kts — nicht bearbeiten. */
+            object BuildInfo {
+                const val VERSION = "$ver"
+            }
+            """.trimIndent() + "\n"
+        )
+    }
+}
+
 // Gson-Fix für Desktop-JVM: parameterlose Konstruktoren für alle @NoArg-Klassen
 // erzeugen (siehe NoArg.kt). Ohne das schlägt die Deserialisierung der
 // Xtream-API-Antworten mit "Unable to create instance of class ..." fehl.
@@ -22,6 +54,7 @@ kotlin {
     }
     sourceSets {
         val jvmMain by getting {
+            kotlin.srcDir(generateBuildInfo)
             dependencies {
                 implementation(compose.desktop.currentOs)
                 implementation(compose.runtime)
@@ -59,7 +92,7 @@ compose.desktop {
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Dmg)
             packageName = "SmartysIPTV"
-            packageVersion = "2.0.5"
+            packageVersion = appVersion
             description = "Smartys IPTV — Live-TV, Filme und Serien auf dem Desktop"
             vendor = "Smartys"
 

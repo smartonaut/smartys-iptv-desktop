@@ -41,6 +41,9 @@ class VlcPlayer : VodPlayerApi {
      *  (sonst SIGSEGV in libvlccore). */
     @Volatile private var playerReleased = false
 
+    /** Laufender stop()-Thread — release() MUSS darauf warten (Teardown-Race). */
+    @Volatile private var stopThread: Thread? = null
+
     @Volatile
     var playing: Boolean = false
         private set
@@ -54,10 +57,18 @@ class VlcPlayer : VodPlayerApi {
     /** Feuert, sobald libVLC den Video-Output erstellt (kurz vor Frame 1).
      *  Wird genutzt, um den Canvas erst dann sichtbar zu schalten — das
      *  VLC-Child-Fenster mappt sonst WEISS und blendet bis zum ersten Frame. */
-    var onVideoOutput: (() -> Unit)? = null
+    override var onVideoOutput: (() -> Unit)? = null
 
     private var currentUrl: String? = null
     private var currentIsVod = false
+
+    /** Position beim Pausieren — für den Resume-Reconnect-Fix (siehe resume()). */
+    private var pausedPosMs = 0L
+
+    /** Ausstehender Seek nach play(): :start-time greift bei 302-Redirects
+     *  (signierte/temporäre URL) nicht zuverlässig, deshalb wird die Position
+     *  beim playing-Event nachgeholt. */
+    private var pendingSeekMs = 0L
 
     companion object {
         @Volatile private var extracted: String? = null
@@ -273,6 +284,21 @@ class VlcPlayer : VodPlayerApi {
                 }
                 override fun playing(mediaPlayer: MediaPlayer) {
                     playing = true
+                    // :start-time greift bei 302-Redirects (signierte URL) oft
+                    // nicht — Film startet bei 0. Hier, im playing-Zustand, ist
+                    // die Media geladen; die Position nachholen. In eigenem
+                    // Thread (kein libVLC-seek im Event-Thread, Deadlock-Gefahr).
+                    val target = pendingSeekMs
+                    if (target > 0) {
+                        pendingSeekMs = 0
+                        thread(isDaemon = true, name = "vlc-pending-seek") {
+                            Thread.sleep(400)
+                            if (!playerReleased && currentPositionMs() < target - 5000) {
+                                PlayerLog.log("VLC pending-seek: Position ${currentPositionMs()} < $target, hole nach")
+                                seekTo(target)
+                            }
+                        }
+                    }
                 }
                 override fun stopped(mediaPlayer: MediaPlayer) {
                     playing = false
@@ -320,6 +346,7 @@ class VlcPlayer : VodPlayerApi {
         val mp = mediaPlayer ?: return
         currentUrl = url
         currentIsVod = isVod
+        pendingSeekMs = startPosMs
         // OSD-Overlay (PNG) braucht den "logo"-Video-Filter in der Kette.
         val osdOpt = ":video-filter=logo"
         if (timeshift) {
@@ -340,13 +367,33 @@ class VlcPlayer : VodPlayerApi {
 
     override fun pause() {
         PlayerLog.mark("VLC pause")
+        pausedPosMs = currentPositionMs()
         mediaPlayer?.controls()?.setPause(true)
         PlayerLog.done("pause")
     }
 
     override fun resume() {
         PlayerLog.mark("VLC resume")
+        val pos = pausedPosMs
         mediaPlayer?.controls()?.setPause(false)
+        // Der Xtream-movie-Endpoint redirectet (302) auf eine signierte,
+        // zeitlich begrenzte URL. Beim Pausieren stoppt libVLC das Lesen; der
+        // Token laeuft ab bzw. der Server trennt die Verbindung. Beim Resume
+        // reconnectet --http-reconnect ueber die Original-URL (neuer 302 ->
+        // neuer Token) und startet bei 0 — der Film "springt auf Anfang".
+        // Deshalb: nach kurzer Wartezeit pruefen, ob die Position verloren
+        // ging, und den Titel an der gemerkten Stelle neu oeffnen (seekTo
+        // direkt nach play verpufft, deshalb :start-time als Media-Option).
+        if (pos > 3000 && currentIsVod) {
+            val url = currentUrl
+            thread(isDaemon = true, name = "vlc-resume-check") {
+                Thread.sleep(1000)
+                if (!playerReleased && currentPositionMs() < 2000) {
+                    PlayerLog.log("VLC resume: Position verloren (war $pos ms), öffne neu")
+                    url?.let { play(it, isVod = true, timeshift = false, timeshiftDir = null, startPosMs = pos) }
+                }
+            }
+        }
         PlayerLog.done("resume")
     }
 
@@ -364,7 +411,7 @@ class VlcPlayer : VodPlayerApi {
         // Netzwerkabbau. Bei einem hängenden Stream blockierte das die gesamte
         // Oberfläche — die App ließ sich dann nicht einmal mehr beenden.
         val mp = mediaPlayer
-        thread(isDaemon = true, name = "vlc-stop") {
+        stopThread = thread(isDaemon = true, name = "vlc-stop") {
             runCatching { mp?.controls()?.stop() }
             playing = false
             PlayerLog.done("stop")
@@ -509,11 +556,44 @@ class VlcPlayer : VodPlayerApi {
     }
 
     /** Karte anzeigen (unten links ueber dem Video). timeoutMs = 0: nie ausblenden. */
-    fun showCard(card: OsdCard, timeoutMs: Int = 5000) {
-        // 1. Wahl: PNG-Overlay über VLCs Bild-Filter — echtes Alpha, wird IN den
-        // Frame geblendet (kein Fenster-Trick, skaliert mit Vollbild mit).
-        if (showCardOverlay(card, timeoutMs)) return
-        // Fallback: AWT-Fenster (opak, falls der Filter nicht greift).
+    override fun showCard(card: OsdCard, timeoutMs: Int) {
+        // --- Cache: identische Karte nicht neu rendern -------------------
+        // Jede Mausbewegung loest ein OSD aus. Vorher wurde dabei jedes Mal
+        // ein BufferedImage gemalt, als PNG auf die Platte geschrieben und
+        // VLC untergeschoben (Messung app.log: 2320 PNG-Writes bei 4715
+        // Maus-Events). Bei gleichem Inhalt ist das reine Verschwendung und
+        // blockiert den EDT. Jetzt: nur den Ausblend-Timer neu aufziehen.
+        if (card == lastShownCard && osdOverlayLive) {
+            if (timeoutMs > 0) {
+                osdOverlayTimer?.stop()
+                osdOverlayTimer = Timer(timeoutMs) {
+                    if (!playerReleased) {
+                        runCatching { mediaPlayer?.logo()?.enable(false) }
+                        osdOverlayLive = false
+                    }
+                }.apply { isRepeats = false; start() }
+            }
+            return
+        }
+
+        // --- Rendern + Schreiben aus dem EDT auslagern -------------------
+        // renderCardPng() malt einen AWT-Panel und schreibt die PNG-Datei.
+        // Auf dem EDT (dort kommt mouseMoved an) friert damit die gesamte
+        // Compose-Oberflaeche ein. Deshalb in einen Daemon-Thread.
+        Thread {
+            val shown = runCatching { showCardOverlay(card, timeoutMs) }.getOrDefault(false)
+            if (shown) {
+                lastShownCard = card
+                osdOverlayLive = true
+            } else {
+                // Fallback (AWT-Fenster) muss auf dem EDT laufen.
+                fallbackOsdWindow(card, timeoutMs)
+            }
+        }.apply { isDaemon = true; name = "osd-render" }.start()
+    }
+
+    /** AWT-Fenster-Fallback. Laeuft immer auf dem EDT. */
+    private fun fallbackOsdWindow(card: OsdCard, timeoutMs: Int) {
         SwingUtilities.invokeLater {
             runCatching {
                 val win = ensureOsdWindow() ?: return@runCatching
@@ -562,6 +642,10 @@ class VlcPlayer : VodPlayerApi {
     private var osdOverlayDir: File? = null
     private var osdOverlaySeq = 0
     private var osdOverlayTimer: Timer? = null
+    /** Zuletzt tatsaechlich gezeichnete Karte — Grundlage fuer den Cache in showCard(). */
+    private var lastShownCard: OsdCard? = null
+    /** true, solange das PNG-Overlay im VLC-Frame sichtbar ist. */
+    private var osdOverlayLive = false
 
     private fun overlayDir(): File {
         osdOverlayDir?.let { return it }
@@ -627,6 +711,7 @@ class VlcPlayer : VodPlayerApi {
                 // Guard: Player könnte zwischenzeitlich freigegeben sein.
                 if (!playerReleased && mediaPlayer === mp) {
                     runCatching { mp.logo().enable(false) }
+                    osdOverlayLive = false
                 }
             }.apply { isRepeats = false; start() }
         }
@@ -1010,7 +1095,7 @@ class VlcPlayer : VodPlayerApi {
      * benutzt: unter VLC 3 unzuverlaessig (eigene API-Variablennamen) und er
      * wuerde das Logo doppelt zeichnen, weil es jetzt in der Karte steckt.
      */
-    fun setLogo(path: String?) {
+    override fun setLogo(path: String?) {
         logoPath = path
         // Cache verwerfen, damit das neue Logo wirklich geladen wird.
         logoPathCached = null
@@ -1022,11 +1107,11 @@ class VlcPlayer : VodPlayerApi {
     fun showLogo(v: Boolean) { /* bewusst ohne Wirkung */ }
 
     /** Relatives Spulen (±ms) — für Timeshift im Archiv-Stream. */
-    fun seekBy(deltaMs: Long) {
+    override fun seekBy(deltaMs: Long) {
         runCatching { mediaPlayer?.controls()?.skipTime(deltaMs) }
     }
 
-    fun hideOsd() {
+    override fun hideOsd() {
         osdOverlayTimer?.stop()
         runCatching { mediaPlayer?.logo()?.enable(false) }
         SwingUtilities.invokeLater {
@@ -1047,6 +1132,15 @@ class VlcPlayer : VodPlayerApi {
         playerReleased = true
         osdOverlayTimer?.stop(); osdOverlayTimer = null
         vlcCtTimer?.stop(); vlcCtTimer = null
+        // Auf den ausgelagerten stop()-Thread warten. Ohne dieses join räumt
+        // factory.release() die libVLC-Instanz ab, während
+        // libvlc_media_player_stop() noch läuft — der Pulse-Audio-Thread
+        // stürzt dann in freigegebenem Speicher ab (SIGSEGV in libpulse,
+        // hs_err_pid517620.log, 30.10.2026).
+        stopThread?.let { t ->
+            if (t.isAlive) runCatching { t.join(3000) }
+        }
+        stopThread = null
         runCatching {
             mediaPlayer?.release()
             factory?.release()
