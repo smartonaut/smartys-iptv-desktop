@@ -1,0 +1,17 @@
+*.apk
+*.AppImage
+backups/
+branding/vorschlaege/
+build/
+*.deb
+desktop/src/jvmMain/resources/libmpv/
+desktop/src/jvmMain/resources/libvlc/
+dist/
+.gradle/
+*.ipk
+.kotlin/
+*.msi
+*.rpm
+*.so
+*.tar.gz
+*.zip

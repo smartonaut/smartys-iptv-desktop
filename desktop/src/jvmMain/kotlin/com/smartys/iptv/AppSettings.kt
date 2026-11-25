@@ -1,0 +1,150 @@
+package com.smartys.iptv
+
+import java.io.File
+
+/**
+ * App-Einstellungen (getrennt von den Credentials), in derselben
+ * config.json unter ~/.smartys-iptv/.
+ */
+object AppSettings {
+
+    private fun dir(): File = File(System.getProperty("user.home"), ".smartys-iptv")
+    private fun cfgFile(): File = File(dir(), "config.json")
+
+    private fun readJson(): MutableMap<String, String> {
+        val f = cfgFile()
+        if (!f.exists()) return mutableMapOf()
+        return runCatching {
+            val o = org.json.JSONObject(f.readText())
+            o.keys().asSequence().associateWith { o.optString(it) }.toMutableMap()
+        }.getOrDefault(mutableMapOf())
+    }
+
+    private fun writeJson(map: MutableMap<String, String>) {
+        val d = dir()
+        if (!d.exists()) d.mkdirs()
+        val o = org.json.JSONObject()
+        map.forEach { (k, v) -> o.put(k, v) }
+        cfgFile().writeText(o.toString(2))
+    }
+
+    private fun get(key: String, def: String): String {
+        val json = readJson()
+        return json[key] ?: def
+    }
+
+    private fun set(key: String, value: String) {
+        val json = readJson()
+        json[key] = value
+        writeJson(json)
+    }
+
+    // ---------- Live-TV-Timeshift ----------
+
+    /** Timeshift (Live-TV-Pause) aktiviert? */
+    fun timeshiftEnabled(): Boolean = get("timeshift_enabled", "false").toBoolean()
+
+    fun setTimeshiftEnabled(enabled: Boolean) = set("timeshift_enabled", enabled.toString())
+
+    /** Aufnahmepfad für den Timeshift-Puffer. Default: ~/.smartys-iptv/timeshift */
+    fun timeshiftDir(): String {
+        val def = File(dir(), "timeshift").absolutePath
+        return get("timeshift_dir", def)
+    }
+
+    fun setTimeshiftDir(path: String) = set("timeshift_dir", path)
+
+    // ---------- Aufnahme-Verzeichnis (dauerhafte Aufnahmen) ----------
+
+    /** Zielverzeichnis für dauerhafte Aufnahmen. Default: ~/.smartys-iptv/recordings */
+    fun recordingsDir(): String {
+        val def = File(dir(), "recordings").absolutePath
+        return get("recordings_dir", def)
+    }
+
+    fun setRecordingsDir(path: String) = set("recordings_dir", path)
+
+    // ---------- Aufnahme-Daemon Autostart ----------
+
+    /** Aufnahme-Daemon beim Login automatisch starten? (Default: aus) */
+    fun daemonAutostartEnabled(): Boolean = get("daemon_autostart", "false").toBoolean()
+
+    fun setDaemonAutostartEnabled(enabled: Boolean) = set("daemon_autostart", enabled.toString())
+
+    // ---------- Fenster ----------
+
+    /** Fenster im Vordergrund halten (Always-on-Top) — Player bleibt ueber anderen Programmen. */
+    fun alwaysOnTop(): Boolean = get("always_on_top", "false").toBoolean()
+
+    fun setAlwaysOnTop(enabled: Boolean) = set("always_on_top", enabled.toString())
+
+    // ---------- Sprache (Deutsch/Englisch) ----------
+
+    /** "de" (Standard) oder "en". */
+    fun language(): String = get("language", "de")
+
+    fun setLanguage(code: String) = set("language", code)
+
+    // ---------- Wiedergabe-Engine (VLC oder MPV) ----------
+
+    /**
+     * Wiedergabe-Engine: "vlc" (Standard) oder "mpv".
+     *
+     * VLC ist ausgereift und laeuft auf beiden Plattformen, braucht unter
+     * Windows aber Fenster-Tricks (Click-Through per WinAPI, --no-mouse-events)
+     * und scannt beim Init alle Plugins (~3 s).
+     *
+     * MPV bettet sich nativ in das HWND ein (keine Tricks), startet schneller
+     * und rendert ueber vo=gpu, ist im Windows-Pfad aber juenger. Der
+     * Umschalter existiert, damit sich beide Engines auf echter Hardware
+     * vergleichen lassen, ohne eine neue Version bauen zu muessen.
+     *
+     * Wirkt ab dem naechsten Player-Start (Screen-Wechsel), nicht mitten
+     * in der laufenden Wiedergabe.
+     */
+    fun engine(): String = get("engine", "vlc")
+
+    fun setEngine(name: String) = set("engine", if (name == "mpv") "mpv" else "vlc")
+
+    /** Hardware-Decoding fuer die MPV-Engine (nur dort wirksam). */
+    fun mpvHwDecoding(): Boolean = get("mpv_hwdec", "true").toBoolean()
+
+    fun setMpvHwDecoding(enabled: Boolean) = set("mpv_hwdec", enabled.toString())
+
+    // ---------- Video-Decoding (automatisch erkannt) ----------
+
+    /**
+     * Gewünschter Modus: "auto" (Standard, empfohlen) | "hw" | "sw".
+     * Bei "auto" lässt der Player libVLC selbst den besten Decoder/Pfad wählen —
+     * identisch zum Verhalten der eigenständigen VLC-App.
+     */
+    fun decodingMode(): String = get("decoding_mode", "auto")
+
+    fun setDecodingMode(mode: String) = set("decoding_mode", mode)
+
+    fun cacheMode(): String = get("cache_mode", "none")
+
+    fun setCacheMode(mode: String) = set("cache_mode", mode)
+
+    /**
+     * Stream-Puffer in Sekunden (User-Vorgabe "wieviel Sekunden gecacht werden
+     * sollen, um Freezer vorzubeugen"). 0 = kein Puffer (sofortiger Start,
+     * stottert bei schwacher Leitung), 1–60 s = vorhalten.
+     * VLC: network-caching/live-caching in ms; mpv: cache-secs/demuxer-readahead-secs.
+     */
+    fun cacheSeconds(): Int = get("cache_seconds", "3").toIntOrNull()?.coerceIn(0, 60) ?: 3
+
+    fun setCacheSeconds(seconds: Int) = set("cache_seconds", seconds.coerceIn(0, 60).toString())
+
+    /**
+     * Effektive libVLC-Argumente für den Decoding-Modus:
+     *  - auto: keine (libVLC auto-detekt, wie die VLC-App)
+     *  - hw:   Hardware-Decoding forcieren
+     *  - sw:   Software-Decoding erzwingen (nur Decoder, kein Ausgabe-Eingriff)
+     */
+    fun hwDecodingArgs(): List<String> = when (decodingMode()) {
+        "hw" -> listOf("--avcodec-hw=any")
+        "sw" -> listOf("--avcodec-hw=none", "--codec", "avcodec")
+        else -> emptyList()
+    }
+}
