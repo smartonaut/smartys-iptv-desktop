@@ -7,7 +7,56 @@ unabhängig gebaut und versioniert — die Nummern dürfen auseinanderlaufen.
 
 ---
 
+## Linux (deb/rpm)
+
+### 2.3.12 — 26.11.2026
+
+- **Kamera-Wand: jede Kachel als eigenes Fenster, Engine umschaltbar.**
+  libvlc liefert in einem Prozess nur 1–2 von 5 Videoausgaben (Rest grün),
+  auch mit eigener Instanz und eigenem Fenster je Kachel. Die Wand nutzt
+  deshalb jetzt **mpv** (libmpv) je Kachel; `wand_engine=vlc` in
+  `~/.smartys-iptv/kameras.properties` schaltet zurück.
+- Rückweg „← Zurück" ist **immer** sichtbar — auch im Fehlerbild „Server
+  antwortet nicht", wo die Auto-Hide-Leiste ausgeblendet war.
+- Kamera-Adresse wird in den Einstellungen angezeigt und ist korrigierbar
+  (häufigste Ursache: falsche IP oder fehlendes `http://`).
+- Protokoll je Kachel in `~/.smartys-iptv/app.log` (Engine, init, Fenster).
+
+### 2.3.11 — 26.11.2026
+
+- Wand: eigene libVLC-Instanz je Kachel (Versuch gegen grüne Kacheln).
+
+### 2.3.10 — 26.11.2026
+
+- Diagnose: libVLC schreibt auf Wunsch sein eigenes Log
+  (`SMARTYS_VLC_LOG=1`).
+
+### 2.3.9 — 26.11.2026
+
+- Wand: jede Kachel in einem eigenen X11-Fenster (statt Compose-Fläche).
+
+### 2.3.8 — 26.11.2026
+
+- Videofläche wird erst angehängt, wenn die Kachel ein echtes Fenster hat.
+- Kein zweiter Wiedergabe-Start nach 9 s mehr (riss die Ausgabe ab).
+
+### 2.3.7 — 26.11.2026
+
+- Gemeinsame libVLC-Instanz für alle Player (Versuch).
+
+### 2.3.6 — 26.11.2026
+
+- Rückweg in der Wand immer sichtbar.
+
+### 2.3.5 — 25.11.2026
+
+- Kamera-Wand mit gestaffeltem Kachel-Start, größeres Startfenster,
+  Quellen-Schalter.
+
+---
+
 ## Windows (msi)
+
 
 ### 2.2.9 — 21.11.2026
 

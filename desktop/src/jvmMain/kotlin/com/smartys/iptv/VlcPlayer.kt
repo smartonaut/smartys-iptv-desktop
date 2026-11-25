@@ -71,6 +71,33 @@ class VlcPlayer : VodPlayerApi {
     private var pendingSeekMs = 0L
 
     companion object {
+        /** Gemeinsame libVLC-Instanz + Nutzungszaehler. */
+        private var gemeinsameFabrik: MediaPlayerFactory? = null
+        private var fabrikNutzer = 0
+
+        @Synchronized
+        private fun geteilteFabrik(args: List<String>): MediaPlayerFactory {
+            val vorhanden = gemeinsameFabrik
+            if (vorhanden != null) {
+                fabrikNutzer++
+                return vorhanden
+            }
+            val neu = MediaPlayerFactory(args)
+            gemeinsameFabrik = neu
+            fabrikNutzer = 1
+            return neu
+        }
+
+        @Synchronized
+        private fun fabrikAbgeben() {
+            fabrikNutzer--
+            if (fabrikNutzer <= 0) {
+                fabrikNutzer = 0
+                runCatching { gemeinsameFabrik?.release() }
+                gemeinsameFabrik = null
+            }
+        }
+
         @Volatile private var extracted: String? = null
 
         private val isWindows =
@@ -253,6 +280,14 @@ class VlcPlayer : VodPlayerApi {
                 "--http-user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
                     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36"
             )
+            // Diagnose Kamera-Wand: libVLC schreibt sein eigenes Log. Nur so ist
+            // sichtbar, warum einzelne Ausgaben keine Bilder liefern.
+            if (java.lang.System.getenv("SMARTYS_VLC_LOG") == "1") {
+                val log = java.io.File(java.lang.System.getProperty("user.home"), ".smartys-iptv/vlc.log")
+                factoryArgs.add("--file-logging")
+                factoryArgs.add("--logfile=${log.absolutePath}")
+                factoryArgs.add("--verbose=2")
+            }
             factoryArgs.addAll(AppSettings.hwDecodingArgs())
             // 1.5.14 Windows: VLCs Video-Output baut ein eigenes Kind-Fenster in die
             // Canvas und verschluckt Maus-KLICKS fuer seine eigene Fenster-Prozedur
@@ -261,6 +296,10 @@ class VlcPlayer : VodPlayerApi {
             // Mausrad erreichen wieder den AWT-Canvas. Nur Windows: auf Linux
             // kommen die Klicks bereits an (Plattform-Regel: nichts anfassen, was geht).
             if (isWindows) factoryArgs.add("--no-mouse-events")
+            // Eigene Instanz je Player: in der Kamera-Wand lieferten mehrere
+            // Ausgaben an EINER Instanz keine Bilder (gruene Kacheln). Mit
+            // eigener Instanz + eigenem Fenster verhaelt sich jede Kachel wie
+            // ein eigener VLC-Prozess.
             val f = MediaPlayerFactory(factoryArgs)
             val mp = f.mediaPlayers().newEmbeddedMediaPlayer()
             val surface = f.videoSurfaces().newVideoSurface(videoCanvas)
@@ -1141,10 +1180,8 @@ class VlcPlayer : VodPlayerApi {
             if (t.isAlive) runCatching { t.join(3000) }
         }
         stopThread = null
-        runCatching {
-            mediaPlayer?.release()
-            factory?.release()
-        }
+        runCatching { mediaPlayer?.release() }
+        runCatching { factory?.release() }
         SwingUtilities.invokeLater {
             osdHide?.stop()
             osdWin?.dispose()

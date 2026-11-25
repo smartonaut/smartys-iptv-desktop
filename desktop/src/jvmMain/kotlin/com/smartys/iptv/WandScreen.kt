@@ -9,6 +9,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -47,6 +48,10 @@ fun WandScreen(onBack: () -> Unit, onOpen: (Kameras.Kamera) -> Unit) {
     // Pi-Kiosk auch nicht da) — hier per Knopf unten rechts ein-/ausblendbar.
     var leiste by remember { mutableStateOf(false) }
 
+    // Esc schliesst die Wand - auf dem PC der natuerliche Rueckweg.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        // nichts, Platzhalter fuer Tastenbehandlung unten
+    }
     LaunchedEffect(Unit) {
         val geladen = withContext(Dispatchers.IO) { Kameras.firmenKameras() }
         kameras = geladen
@@ -59,11 +64,23 @@ fun WandScreen(onBack: () -> Unit, onOpen: (Kameras.Kamera) -> Unit) {
         bekannt + kameras.filterNot { k -> bekannt.any { it.id == k.id && it.name == k.name } }
     }
 
-    Column(Modifier.fillMaxSize().background(Color.Black).padding(10.dp)) {
+    Column(
+        Modifier.fillMaxSize().background(Color.Black).padding(10.dp)
+    ) {
+        // Rueckweg IMMER sichtbar: auch wenn kein Server antwortet oder die
+        // Bedienleiste ausgeblendet ist, darf man nicht im schwarzen Bild haengen.
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            KKnopf("← Zurück") { onBack() }
+            Spacer(Modifier.width(12.dp))
+            Text(
+                if (meldung != null) meldung!! else "${geordnet.size} Kameras",
+                color = if (meldung != null) Color(0xFFFFB4A9) else TextMid,
+                fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(Modifier.height(6.dp))
         if (leiste) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                KKnopf("← Zurück") { onBack() }
-                Spacer(Modifier.width(12.dp))
                 Text("Kamera-Wand", color = TextHi, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.width(20.dp))
                 Text("Spalten:", color = TextMid, fontSize = 12.sp)
@@ -81,9 +98,6 @@ fun WandScreen(onBack: () -> Unit, onOpen: (Kameras.Kamera) -> Unit) {
             Spacer(Modifier.height(8.dp))
         }
 
-        meldung?.let {
-            Text(it, color = TextMid, fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
-        }
 
         // Reihen aus den Feldbreiten bilden — jede Kachel bekommt ihr Feld als
         // Gewicht, dadurch fuellt die Wand die Flaeche ohne Rest.
@@ -175,14 +189,65 @@ private fun WandKachelDesktop(
     onBreite: (Int) -> Unit,
     onHoch: () -> Unit
 ) {
+    // Kamera-Wand nutzt bewusst mpv: mehrere libvlc-Videoausgaben in einem
+    // Prozess liefern nur 1-2 Bilder (Rest gruen), auch mit eigener Instanz und
+    // eigenem Fenster je Kachel. libmpv rendert je Kachel in ihr eigenes
+    // natives Fenster und hat dieses Problem nicht.
     val player: VodPlayerApi = remember(k.url) {
-        if (AppSettings.engine() == "mpv") MpvPlayer() else VlcPlayer()
+        if (KameraPrefs.wandEngine() == "vlc") VlcPlayer() else MpvPlayer()
     }
     val canvas = remember(k.url) { Canvas().apply { background = java.awt.Color.BLACK } }
     var inited by remember(k.url) { mutableStateOf(false) }
     var fokus by remember { mutableStateOf(false) }
+    // Eigene X11-Fenster pro Kachel: die Compose-Zeichenflaeche kann mehrere
+    // eingebettete Videolayer nicht zuverlaessig darstellen (nur 1-2 sichtbar,
+    // Rest gruen). Ein JWindow pro Kachel umgeht das komplett.
+    var ziel by remember { mutableStateOf<java.awt.Rectangle?>(null) }
+    val fenster = remember(k.url) { java.util.concurrent.atomic.AtomicReference<javax.swing.JWindow?>(null) }
 
-    DisposableEffect(k.url) { onDispose { player.release() } }
+    DisposableEffect(k.url) {
+        onDispose {
+            val w = fenster.get()
+            if (w != null) javax.swing.SwingUtilities.invokeLater { runCatching { w.dispose() } }
+            player.release()
+        }
+    }
+
+    LaunchedEffect(k.url, ziel) {
+        val r = ziel ?: return@LaunchedEffect
+        if (r.width < 40 || r.height < 40) return@LaunchedEffect
+        kotlinx.coroutines.delay(versatzMs)
+        PlayerLog.mark("Wand-Kachel ${k.name}: Fenster ${r.width}x${r.height} @ ${r.x},${r.y}")
+        var w = fenster.get()
+        if (w == null) {
+            w = javax.swing.JWindow()
+            w.background = java.awt.Color.BLACK
+            w.contentPane = javax.swing.JPanel(java.awt.BorderLayout()).apply {
+                background = java.awt.Color.BLACK
+                add(canvas, java.awt.BorderLayout.CENTER)
+            }
+            w.isAlwaysOnTop = true
+            w.isVisible = true
+            canvas.addMouseListener(object : java.awt.event.MouseAdapter() {
+                override fun mouseClicked(e: java.awt.event.MouseEvent) {
+                    if (e.clickCount == 1) runCatching { onOpen() }
+                }
+            })
+            fenster.set(w)
+        }
+        w.location = java.awt.Point(r.x, r.y)
+        w.setSize(r.width, r.height)
+        if (!inited) {
+            inited = true
+            player.videoCanvas = canvas
+            val ok = player.init()
+            PlayerLog.log("Wand-Kachel ${k.name}: Engine=${player.javaClass.simpleName} init=$ok")
+            if (ok) {
+                player.play(k.url, isVod = false, timeshift = false, timeshiftDir = null, startPosMs = 0)
+                player.setMuted(true)
+            }
+        }
+    }
 
     Box(
         modifier
@@ -190,64 +255,20 @@ private fun WandKachelDesktop(
             .background(Color.Black)
             .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Enter) { fokus = true }
             .onPointerEvent(androidx.compose.ui.input.pointer.PointerEventType.Exit) { fokus = false }
+            .onGloballyPositioned { c ->
+                val s = c.localToScreen(androidx.compose.ui.geometry.Offset.Zero)
+                ziel = java.awt.Rectangle(
+                    s.x.toInt(), s.y.toInt(),
+                    c.size.width.coerceAtLeast(1),
+                    (c.size.height - 22).coerceAtLeast(1)
+                )
+            }
             .border(
                 width = if (fokus) 2.dp else 0.dp,
                 color = if (fokus) Accent else Color.Transparent,
                 shape = RoundedCornerShape(8.dp)
             )
     ) {
-        SwingPanel(
-            factory = {
-                if (!inited) {
-                    inited = true
-                    player.videoCanvas = canvas
-                    // Gestaffelt starten: mehrere VLC-Ausgaben gleichzeitig liefern
-                    // sonst gruene Flaechen (Ausgabe angelegt, aber kein Bild).
-                    val t = Thread {
-                        try {
-                            Thread.sleep(versatzMs)
-                        } catch (_: InterruptedException) {
-                        }
-                        javax.swing.SwingUtilities.invokeLater {
-                            val start = {
-                                if (player.init()) {
-                                    player.play(
-                                        k.url, isVod = false, timeshift = false,
-                                        timeshiftDir = null, startPosMs = 0
-                                    )
-                                    player.setMuted(true)
-                                }
-                            }
-                            if (canvas.isDisplayable) start()
-                            else canvas.addHierarchyListener { _ ->
-                                if (canvas.isDisplayable) start()
-                            }
-                            // Einmal nachfassen, ohne den Decoder neu aufzubauen.
-                            val nach = Thread {
-                                try {
-                                    Thread.sleep(9000)
-                                } catch (_: InterruptedException) {
-                                }
-                                javax.swing.SwingUtilities.invokeLater {
-                                    player.play(
-                                        k.url, isVod = false, timeshift = false,
-                                        timeshiftDir = null, startPosMs = 0
-                                    )
-                                    player.setMuted(true)
-                                }
-                            }
-                            nach.isDaemon = true
-                            nach.start()
-                        }
-                    }
-                    t.isDaemon = true
-                    t.start()
-                }
-                canvas
-            },
-            modifier = Modifier.fillMaxSize().clickable(onClick = onOpen)
-        )
-
         Row(
             Modifier.fillMaxWidth().align(Alignment.BottomStart).padding(horizontal = 6.dp, vertical = 3.dp),
             verticalAlignment = Alignment.CenterVertically

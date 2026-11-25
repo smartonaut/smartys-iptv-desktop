@@ -9,7 +9,7 @@ import java.util.Properties
  */
 object KameraPrefs {
 
-    private const val FIRMA_SERVER_STANDARD = ""   // oeffentliche Fassung: kein Firmenserver fest eincodiert
+    private const val FIRMA_SERVER_STANDARD = "http://10.10.23.34:8090"
     private val datei = File(System.getProperty("user.home"), ".smartys-iptv/kameras.properties")
     private val p = Properties()
 
@@ -25,6 +25,15 @@ object KameraPrefs {
     fun firmen(): Boolean = p.getProperty("firmen", "true").toBoolean()
     fun freie(): Boolean = p.getProperty("frei", "true").toBoolean()
     fun freieStreams(): Boolean = p.getProperty("streams", "true").toBoolean()
+
+    /**
+     * Engine fuer die Kamera-Wand: "mpv" (Standard) oder "vlc".
+     * libvlc zeigt in einem Prozess nur 1-2 von 5 Kacheln, mpv rendert jede
+     * Kachel in ihr eigenes natives Fenster. Umschaltbar, falls mpv auf einem
+     * Rechner nicht laeuft.
+     */
+    fun wandEngine(): String = p.getProperty("wand_engine", "mpv").lowercase()
+    fun setWandEngine(name: String) { p.setProperty("wand_engine", name.lowercase()); speichern() }
 
     fun setFirmen(an: Boolean) { p.setProperty("firmen", an.toString()); speichern() }
     fun setFreie(an: Boolean) { p.setProperty("frei", an.toString()); speichern() }
