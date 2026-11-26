@@ -14,7 +14,7 @@ plugins {
  * selbst konnte sie nicht anzeigen, und eine hartkodierte Fusszeile waere beim
  * naechsten Bump stehengeblieben.
  */
-val appVersion = "2.3.12"
+val appVersion = "2.3.16"
 
 // Erzeugt BuildInfo.kt mit der Version. Laeuft bei jedem Build neu, damit die
 // angezeigte Nummer nicht von der Paketversion weglaufen kann.

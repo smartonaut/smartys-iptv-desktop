@@ -87,7 +87,8 @@ object Kameras {
         if (bekannt.split(".").size == 4) p += bekannt.split(".").take(3).joinToString(".") + "."
         listOf("192.168.1.", "192.168.0.", "192.168.4.", "10.0.0.").forEach { p += it }
         // Buero-VLANs nur, wenn die Firmen-Kameras eingeschaltet sind.
-        if (KameraPrefs.firmen()) listOf("10.10.23.", "10.10.25.").forEach { p += it }   // Bueronetze nur per Suche, ohne feste Server-Adresse
+        // Keine internen Netze fest eingetragen: das oeffentliche Repo bleibt
+        // neutral, die Adresse kommt aus den Einstellungen bzw. firma.properties.   // Bueronetze nur per Suche, ohne feste Server-Adresse
         return p.toList()
     }
 

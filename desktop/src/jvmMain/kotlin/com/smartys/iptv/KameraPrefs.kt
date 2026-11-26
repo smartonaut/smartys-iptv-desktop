@@ -9,7 +9,20 @@ import java.util.Properties
  */
 object KameraPrefs {
 
-    private const val FIRMA_SERVER_STANDARD = "http://10.10.23.34:8090"
+    /**
+     * Firmenserver-Adresse NUR aus einer lokalen, nicht versionierten Datei
+     * (~/.smartys-iptv/firma.properties, Schluessel firma_server). So bleibt das
+     * oeffentliche Repo frei von Kundendaten, die Geraete funktionieren trotzdem.
+     */
+    private fun firmaStandard(): String {
+        val f = File(System.getProperty("user.home"), ".smartys-iptv/firma.properties")
+        if (!f.exists()) return ""
+        return runCatching {
+            Properties().apply { f.inputStream().use { load(it) } }
+                .getProperty("firma_server", "") ?: ""
+        }.getOrDefault("")
+    }
+    private val FIRMA_SERVER_STANDARD: String get() = firmaStandard()
     private val datei = File(System.getProperty("user.home"), ".smartys-iptv/kameras.properties")
     private val p = Properties()
 

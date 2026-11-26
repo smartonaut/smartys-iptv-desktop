@@ -197,7 +197,9 @@ private fun WandKachelDesktop(
         if (KameraPrefs.wandEngine() == "vlc") VlcPlayer() else MpvPlayer()
     }
     val canvas = remember(k.url) { Canvas().apply { background = java.awt.Color.BLACK } }
-    var inited by remember(k.url) { mutableStateOf(false) }
+    val inited = remember(k.url) { java.util.concurrent.atomic.AtomicBoolean(false) }
+    // Rueckfall-Player, falls die gewaehlte Engine nicht initialisiert (mpv).
+    val ersatzPlayer = remember(k.url) { java.util.concurrent.atomic.AtomicReference<VodPlayerApi?>(null) }
     var fokus by remember { mutableStateOf(false) }
     // Eigene X11-Fenster pro Kachel: die Compose-Zeichenflaeche kann mehrere
     // eingebettete Videolayer nicht zuverlaessig darstellen (nur 1-2 sichtbar,
@@ -209,6 +211,7 @@ private fun WandKachelDesktop(
         onDispose {
             val w = fenster.get()
             if (w != null) javax.swing.SwingUtilities.invokeLater { runCatching { w.dispose() } }
+            ersatzPlayer.get()?.release()
             player.release()
         }
     }
@@ -217,35 +220,59 @@ private fun WandKachelDesktop(
         val r = ziel ?: return@LaunchedEffect
         if (r.width < 40 || r.height < 40) return@LaunchedEffect
         kotlinx.coroutines.delay(versatzMs)
-        PlayerLog.mark("Wand-Kachel ${k.name}: Fenster ${r.width}x${r.height} @ ${r.x},${r.y}")
-        var w = fenster.get()
-        if (w == null) {
-            w = javax.swing.JWindow()
-            w.background = java.awt.Color.BLACK
-            w.contentPane = javax.swing.JPanel(java.awt.BorderLayout()).apply {
-                background = java.awt.Color.BLACK
-                add(canvas, java.awt.BorderLayout.CENTER)
-            }
-            w.isAlwaysOnTop = true
-            w.isVisible = true
-            canvas.addMouseListener(object : java.awt.event.MouseAdapter() {
-                override fun mouseClicked(e: java.awt.event.MouseEvent) {
-                    if (e.clickCount == 1) runCatching { onOpen() }
+        // ALLES auf dem EDT: libVLC und libmpv verlangen, dass Fenster und
+        // native Videoflaeche auf dem Swing-Thread entstehen - sonst schlaegt
+        // init() fehl (Log: "init=false") und die Kachel bleibt schwarz.
+        javax.swing.SwingUtilities.invokeLater {
+            var w = fenster.get()
+            if (w == null) {
+                w = javax.swing.JWindow()
+                w.background = java.awt.Color.BLACK
+                w.contentPane = javax.swing.JPanel(java.awt.BorderLayout()).apply {
+                    background = java.awt.Color.BLACK
+                    add(canvas, java.awt.BorderLayout.CENTER)
                 }
-            })
-            fenster.set(w)
-        }
-        w.location = java.awt.Point(r.x, r.y)
-        w.setSize(r.width, r.height)
-        if (!inited) {
-            inited = true
-            player.videoCanvas = canvas
-            val ok = player.init()
-            PlayerLog.log("Wand-Kachel ${k.name}: Engine=${player.javaClass.simpleName} init=$ok")
-            if (ok) {
-                player.play(k.url, isVod = false, timeshift = false, timeshiftDir = null, startPosMs = 0)
-                player.setMuted(true)
+                w.isAlwaysOnTop = true
+                w.isVisible = true
+                canvas.addMouseListener(object : java.awt.event.MouseAdapter() {
+                    override fun mouseClicked(e: java.awt.event.MouseEvent) {
+                        if (e.clickCount == 1) runCatching { onOpen() }
+                    }
+                })
+                fenster.set(w)
             }
+            w!!.location = java.awt.Point(r.x, r.y)
+            w.setSize(r.width, r.height)
+            PlayerLog.mark("Wand-Kachel ${k.name}: Fenster ${r.width}x${r.height} @ ${r.x},${r.y}")
+
+            val start = {
+                if (!inited.get()) {
+                    inited.set(true)
+                    player.videoCanvas = canvas
+                    val ok = player.init()
+                    PlayerLog.log(
+                        "Wand-Kachel ${k.name}: Engine=${player.javaClass.simpleName} " +
+                            "init=$ok displayable=${canvas.isDisplayable}"
+                    )
+                    if (ok) {
+                        player.play(k.url, isVod = false, timeshift = false, timeshiftDir = null, startPosMs = 0)
+                        player.setMuted(true)
+                    } else if (player !is VlcPlayer) {
+                        // mpv nicht verfuegbar (z.B. mpv_create NULL): Kachel
+                        // laeuft trotzdem, dann eben ueber VLC.
+                        PlayerLog.log("Wand-Kachel ${k.name}: mpv fehlgeschlagen -> Rueckfall auf VLC")
+                        val ersatz = VlcPlayer()
+                        ersatz.videoCanvas = canvas
+                        if (ersatz.init()) {
+                            ersatzPlayer.set(ersatz)
+                            ersatz.play(k.url, isVod = false, timeshift = false, timeshiftDir = null, startPosMs = 0)
+                            ersatz.setMuted(true)
+                        }
+                    }
+                }
+            }
+            if (canvas.isDisplayable) start()
+            else canvas.addHierarchyListener { _ -> if (canvas.isDisplayable) start() }
         }
     }
 

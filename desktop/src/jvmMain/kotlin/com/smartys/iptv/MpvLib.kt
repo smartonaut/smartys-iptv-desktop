@@ -87,12 +87,28 @@ interface MpvLib : Library {
             }
         }.getOrDefault(-1L)
 
+        /** Welche Datei JNA tatsaechlich geladen hat (Diagnose). */
+        var geladeneDatei: String = "(nicht geladen)"
+            private set
+
+        /** Client-API-Version der geladenen Bibliothek (Diagnose; 0 = Aufruf fehlt). */
+        var geladeneApi: String = "(unbekannt)"
+            private set
+
         val INSTANCE: MpvLib by lazy {
             // Windows: shinchiro-Build liefert die DLL als "libmpv-2.dll"
-            // (ffmpeg statisch gelinkt, kein extra DLL-Satz nötig).
+            // (ffmpeg statisch gelinkt, kein extra DLL-Satz noetig).
             val libName = if (isWindows) "libmpv-2" else "mpv"
             ensureLibMpv()?.let { NativeLibrary.addSearchPath(libName, it.absolutePath) }
-            Native.load(libName, MpvLib::class.java)
+            val inst = Native.load(libName, MpvLib::class.java)
+            runCatching {
+                geladeneDatei = NativeLibrary.getInstance(libName).file?.absolutePath ?: "?"
+                // mpv_client_api_version gibt (major << 16) | minor zurueck
+                val v = NativeLibrary.getInstance(libName)
+                    .getFunction("mpv_client_api_version").invokeLong(arrayOf<Any>())
+                geladeneApi = "${v shr 16}.${v and 0xFFFF}"
+            }
+            inst
         }
     }
 }

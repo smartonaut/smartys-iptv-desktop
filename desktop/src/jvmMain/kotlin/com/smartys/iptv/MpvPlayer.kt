@@ -74,7 +74,10 @@ class MpvPlayer : VodPlayerApi {
         return runCatching {
             val ctx = MpvLib.INSTANCE.mpv_create()
             if (ctx == null) {
-                System.err.println("[MpvPlayer] mpv_create gab NULL zurück")
+                PlayerLog.log(
+                    "[MpvPlayer] mpv_create gab NULL zurueck | Datei=${MpvLib.geladeneDatei} " +
+                        "| API=${MpvLib.geladeneApi}"
+                )
                 return@runCatching false
             }
             System.err.println("[MpvPlayer] mpv_create OK, setze Optionen")
@@ -162,7 +165,7 @@ class MpvPlayer : VodPlayerApi {
             MpvLib.INSTANCE.mpv_set_option_string(ctx, "msg-level", "all=info")
             val initCode = MpvLib.INSTANCE.mpv_initialize(ctx)
             if (initCode < 0) {
-                System.err.println("[MpvPlayer] mpv_initialize FEHLER-Code: $initCode")
+                PlayerLog.log("[MpvPlayer] mpv_initialize FEHLER-Code: $initCode")
                 MpvLib.INSTANCE.mpv_terminate_destroy(ctx)
                 return@runCatching false
             }
@@ -180,7 +183,9 @@ class MpvPlayer : VodPlayerApi {
             startEventLoop()
             true
         }.getOrElse { e ->
-            System.err.println("[MpvPlayer] init Exception: ${e.javaClass.simpleName}: ${e.message}")
+            // GUI-Apps haben kein stderr: Fehler ins app.log schreiben, sonst
+            // ist "init=false" nicht zu deuten.
+            PlayerLog.log("[MpvPlayer] init Exception: ${e.javaClass.simpleName}: ${e.message}")
             false
         }
     }
