@@ -9,6 +9,34 @@ unabhängig gebaut und versioniert — die Nummern dürfen auseinanderlaufen.
 
 ## Linux (deb/rpm)
 
+### 2.3.16 — 26.11.2026
+
+- **Kamera-Wand startet jetzt zuverlaessig.** Fenster und native Videoflaeche
+  entstehen komplett auf dem GUI-Thread (Swing-EDT) — vorher blieb die Kachel
+  schwarz, weil `init()` ausserhalb des EDT mit `init=false` abbrach.
+- Die Kachel startet erst, wenn die Zeichenflaeche wirklich `displayable` ist;
+  vorher wird auf das Hierarchy-Event gewartet.
+- Schlaegt **mpv** fehl (`mpv_create` NULL, `mpv_initialize` < 0), faellt die
+  Kachel selbsttaetig auf **VLC** zurueck — die Wand laeuft in jedem Fall.
+- Fensterposition folgt dem Raster (Setzen von Groesse und Position auf dem EDT).
+- **Keine Firmenserver-Adresse mehr im Quelltext**: sie kommt aus
+  `~/.smartys-iptv/firma.properties` (`firma_server`). Oeffentliche Builds ohne
+  Datei bleiben neutral, der eigene Rechner laeuft wie vorher.
+
+### 2.3.14 / 2.3.15 — 26.11.2026
+
+- Diagnose: mpv-Fehler (NULL-Handle, Fehlercodes, Exceptions) gehen ins
+  `~/.smartys-iptv/app.log` statt auf stderr — GUI-Apps haben kein stderr.
+- Die tatsaechlich geladene libmpv-Datei und ihre Client-API-Version werden
+  protokolliert (`MpvLib.geladeneDatei` / `geladeneApi`).
+
+### 2.3.13 — 26.11.2026
+
+- Wand nutzt **mpv (libmpv) je Kachel**; `wand_engine=vlc` in
+  `~/.smartys-iptv/kameras.properties` schaltet zurueck.
+- Rueckweg „← Zurueck" ist immer sichtbar, Kamera-Adresse ist in den
+  Einstellungen korrigierbar, Protokoll je Kachel in `app.log`.
+
 ### 2.3.12 — 26.11.2026
 
 - **Kamera-Wand: jede Kachel als eigenes Fenster, Engine umschaltbar.**
